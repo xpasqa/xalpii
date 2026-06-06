@@ -1,6 +1,7 @@
 "use client";
 
 import type { ButtonHTMLAttributes, ReactNode } from "react";
+import Link from "next/link";
 import { LoaderCircle } from "lucide-react";
 import { cn } from "../../lib/utils";
 
@@ -15,6 +16,7 @@ type ButtonCTAProps = {
   rightIcon?: ReactNode;
   isLoading?: boolean;
   fullWidth?: boolean;
+  href?: string;
 } & Pick<
   ButtonHTMLAttributes<HTMLButtonElement>,
   "disabled" | "type" | "onClick" | "className" | "aria-label"
@@ -48,28 +50,15 @@ export function ButtonCTA({
   isLoading = false,
   disabled,
   fullWidth = false,
+  href,
   type = "button",
   className,
   ...buttonProps
 }: ButtonCTAProps) {
   const isDisabled = disabled || isLoading;
   const showLeftSlot = isLoading || Boolean(leftIcon);
-
-  return (
-    <button
-      className={cn(
-        "inline-flex shrink-0 items-center justify-center font-interface font-semibold transition duration-200 ease-out",
-        "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-travel-primary/30 focus-visible:ring-offset-2",
-        "active:translate-y-px disabled:pointer-events-none disabled:cursor-not-allowed disabled:border-travel-border disabled:bg-travel-bg disabled:text-travel-muted disabled:shadow-none",
-        variants[variant],
-        sizes[size],
-        fullWidth && "w-full",
-        className
-      )}
-      disabled={isDisabled}
-      type={type}
-      {...buttonProps}
-    >
+  const content = (
+    <>
       {showLeftSlot ? (
         <span className="inline-flex size-4 items-center justify-center">
           {isLoading ? (
@@ -83,6 +72,35 @@ export function ButtonCTA({
       {rightIcon ? (
         <span className="inline-flex size-4 items-center justify-center">{rightIcon}</span>
       ) : null}
+    </>
+  );
+
+  const classes = cn(
+    "inline-flex shrink-0 items-center justify-center font-interface font-semibold transition duration-200 ease-out",
+    "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-travel-primary/30 focus-visible:ring-offset-2",
+    "active:translate-y-px disabled:pointer-events-none disabled:cursor-not-allowed disabled:border-travel-border disabled:bg-travel-bg disabled:text-travel-muted disabled:shadow-none",
+    variants[variant],
+    sizes[size],
+    fullWidth && "w-full",
+    className
+  );
+
+  if (href && !isDisabled) {
+    return (
+      <Link className={classes} href={href}>
+        {content}
+      </Link>
+    );
+  }
+
+  return (
+    <button
+      className={classes}
+      disabled={isDisabled}
+      type={type}
+      {...buttonProps}
+    >
+      {content}
     </button>
   );
 }

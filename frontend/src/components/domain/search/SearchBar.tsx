@@ -3,6 +3,7 @@
 import type { FormEvent, ReactNode } from "react";
 import { CalendarDays, MapPin, Search, Users } from "lucide-react";
 import { ButtonCTA } from "../../ui/ButtonCTA";
+import { cn } from "../../../lib/utils";
 
 type SearchBarProps = {
   destination: string;
@@ -12,6 +13,7 @@ type SearchBarProps = {
   onDateChange: (value: string) => void;
   onParticipantsChange: (value: string) => void;
   onSubmit: () => void;
+  className?: string;
 };
 
 export function SearchBar({
@@ -21,7 +23,8 @@ export function SearchBar({
   onDestinationChange,
   onDateChange,
   onParticipantsChange,
-  onSubmit
+  onSubmit,
+  className
 }: SearchBarProps) {
   function handleSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -30,7 +33,10 @@ export function SearchBar({
 
   return (
     <form
-      className="group grid gap-2 rounded-[14px] border border-travel-border bg-white p-2.5 shadow-[0_14px_38px_rgba(26,26,26,0.09)] transition duration-200 hover:shadow-[0_16px_42px_rgba(26,26,26,0.11)] focus-within:border-travel-primary/35 md:grid-cols-[1.35fr_0.9fr_0.8fr_auto] md:items-center md:gap-0"
+      className={cn(
+        "grid gap-2 rounded-[12px] border border-travel-border bg-white p-2 shadow-[0_18px_42px_rgba(26,26,26,0.12)] transition duration-200 focus-within:border-travel-primary/35 md:grid-cols-[1.35fr_0.95fr_0.85fr_auto] md:items-center md:gap-0",
+        className
+      )}
       onSubmit={handleSubmit}
     >
       <SearchField
@@ -75,7 +81,7 @@ export function SearchBar({
       </SearchField>
 
       <ButtonCTA
-        className="mt-1 h-11 w-full rounded-[10px] px-5 md:mt-0 md:h-12 md:w-auto md:px-5"
+        className="mt-1 h-11 w-full rounded-[9px] px-5 text-sm md:mt-0 md:h-[52px] md:w-auto md:px-6"
         leftIcon={<Search className="size-5" />}
         type="submit"
       >
@@ -99,17 +105,17 @@ function SearchField({
   return (
     <label
       className={[
-        "flex min-w-0 items-center gap-3 rounded-[10px] px-3 py-3 transition duration-200 hover:bg-travel-bg focus-within:bg-travel-bg md:px-4",
+        "flex min-w-0 items-center gap-3 rounded-[9px] px-3 py-2.5 transition duration-200 hover:bg-travel-bg focus-within:bg-travel-bg md:px-4 md:py-3",
         className
       ]
         .filter(Boolean)
         .join(" ")}
     >
-      <span className="flex size-9 shrink-0 items-center justify-center rounded-travel-md bg-travel-bg">
+      <span className="flex size-8 shrink-0 items-center justify-center rounded-travel-md bg-travel-bg">
         {icon}
       </span>
       <span className="min-w-0 flex-1">
-        <span className="block font-brand text-[11px] font-semibold uppercase tracking-[0.12em] text-travel-muted">
+        <span className="block font-brand text-[10px] font-semibold uppercase tracking-[0.1em] text-travel-muted">
           {label}
         </span>
         <span className="mt-1 block">{children}</span>

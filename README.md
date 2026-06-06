@@ -116,6 +116,13 @@ npm install
 npm run dev
 ```
 
+For a clean local dev start after cache issues:
+
+```bash
+cd frontend
+npm run dev:clean
+```
+
 Open the design system preview page:
 
 ```txt
@@ -123,6 +130,40 @@ http://localhost:3000/dev/design-system
 ```
 
 The preview route uses mock data only and is intended for reviewing reusable UI, layout shells, and domain display components before product pages are built.
+
+### Frontend Dev Cache Notes
+
+Do not run `npm run build` while `npm run dev` is still running. Stop the dev server first, then run the production build verification.
+
+Recommended production build check:
+
+```bash
+cd frontend
+npm run clean
+npm run build
+```
+
+After a production build check, clean again before restarting local development:
+
+```bash
+cd frontend
+npm run clean
+npm run dev
+```
+
+If local development fails with a missing vendor chunk such as:
+
+```txt
+ENOENT: no such file or directory, open frontend/.next/server/vendor-chunks/lucide-react.js
+```
+
+reset the local Next.js cache:
+
+```bash
+cd frontend
+npm run clean
+npm run dev
+```
 
 ## Project Structure
 

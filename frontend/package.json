@@ -3,8 +3,10 @@
   "version": "0.1.0",
   "private": true,
   "scripts": {
-    "build": "next build",
+    "clean": "rm -rf .next node_modules/.cache",
+    "dev:clean": "npm run clean && npm run dev",
     "dev": "next dev --hostname 0.0.0.0 --port 3000",
+    "build": "next build",
     "lint": "eslint .",
     "start": "next start --hostname 0.0.0.0 --port 3000"
   },
