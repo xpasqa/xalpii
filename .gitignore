@@ -1,4 +1,12 @@
 .env
+.env.local
+.env.docker
+backend/.env
+backend/.env.local
+backend/.env.docker
+!.env.example
+!.env.local.example
+!.env.docker.example
 node_modules/
 dist/
 .next/

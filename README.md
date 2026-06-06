@@ -1,6 +1,6 @@
 # Alpii Travel
 
-Initial Dockerized project foundation for Alpii.
+Initial Sprint 0 foundation for Alpii.
 
 ## Stack
 
@@ -24,25 +24,78 @@ Initial Dockerized project foundation for Alpii.
 | MinIO API | http://localhost:9000 |
 | MinIO console | http://localhost:9001 |
 
-## Setup
+## Hybrid Local Development
 
-1. Copy the environment example:
+Use this mode when infrastructure runs in Docker but the backend runs manually on your machine.
 
-   ```bash
-   cp .env.example .env
-   ```
-
-2. Start the full stack:
+1. Copy the local environment template:
 
    ```bash
-   docker compose --env-file .env up --build
+   cp .env.local.example .env.local
+   cp .env.local.example backend/.env
    ```
 
-3. Check the backend health endpoint:
+2. Start infrastructure only:
+
+   ```bash
+   docker compose -f docker-compose.infra.yml --env-file .env.local up -d
+   ```
+
+3. Install and run the backend:
+
+   ```bash
+   cd backend
+   npm install
+   npm run prisma:generate
+   npm run start:dev
+   ```
+
+4. Check the backend health endpoint from another terminal:
 
    ```bash
    curl http://localhost:4000/health
    ```
+
+Expected response:
+
+```json
+{
+  "status": "ok",
+  "service": "alpii-api",
+  "database": "ok"
+}
+```
+
+For hybrid mode, `DATABASE_URL` must use `localhost`, not `postgres`.
+
+## Full Docker Development
+
+Use this mode when backend and frontend also run inside Docker.
+
+```bash
+cp .env.docker.example .env
+docker compose --env-file .env up --build
+```
+
+In full Docker mode, `DATABASE_URL` must use the Compose service host `postgres`.
+
+## Environment Files
+
+- `.env.local.example`: hybrid local mode, host machine reaches Docker infra through `localhost`.
+- `.env.docker.example`: full Docker mode, services reach each other through Compose hostnames.
+- `.env.example`: default Docker-compatible template kept for simple Compose usage.
+- `backend/.env`: local backend env file. In hybrid mode, copy `.env.local.example` here.
+
+The backend loads env files in this order when run manually from `backend/`:
+
+```txt
+backend/.env
+backend/.env.local
+.env.local
+.env
+```
+
+This keeps `backend/.env` from being accidentally overridden by a root Docker-mode `.env`.
 
 ## MinIO Buckets
 
@@ -51,31 +104,16 @@ The `minio-init` service creates these buckets on startup:
 - `public`: anonymously readable
 - `private`: private
 
-The MinIO console is available at http://localhost:9001 with the credentials from `.env`.
+The MinIO console is available at http://localhost:9001 with the credentials from your env file.
 
-## Local Development
+## Frontend
 
-Install and run the backend:
-
-```bash
-cd backend
-npm install
-npm run prisma:generate
-npm run start:dev
-```
-
-Install and run the frontend:
+Run the frontend manually:
 
 ```bash
 cd frontend
 npm install
 npm run dev
-```
-
-When running outside Docker, set `DATABASE_URL` to a host-reachable PostgreSQL URL, for example:
-
-```bash
-DATABASE_URL=postgresql://alpii:alpii_password@localhost:5432/alpii?schema=public
 ```
 
 ## Project Structure
@@ -87,7 +125,9 @@ DATABASE_URL=postgresql://alpii:alpii_password@localhost:5432/alpii?schema=publi
 ├── docker/
 │   └── minio/
 ├── docker-compose.yml
+├── docker-compose.infra.yml
 ├── .env.example
+├── .env.local.example
+├── .env.docker.example
 └── README.md
 ```
-# xalpii

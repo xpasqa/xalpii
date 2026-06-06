@@ -12,12 +12,16 @@ export class HealthController {
 
       return {
         status: "ok",
+        service: "alpii-api",
         database: "ok"
       };
     } catch {
       throw new ServiceUnavailableException({
-        status: "error",
-        database: "unavailable"
+        code: "DATABASE_UNAVAILABLE",
+        message: "Database is unavailable",
+        details: {
+          database: "unavailable"
+        }
       });
     }
   }
