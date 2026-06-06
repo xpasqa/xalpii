@@ -116,6 +116,14 @@ npm install
 npm run dev
 ```
 
+Open the design system preview page:
+
+```txt
+http://localhost:3000/dev/design-system
+```
+
+The preview route uses mock data only and is intended for reviewing reusable UI, layout shells, and domain display components before product pages are built.
+
 ## Project Structure
 
 ```text

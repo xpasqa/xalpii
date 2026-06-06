@@ -1,0 +1,119 @@
+"use client";
+
+import type { FormEvent, ReactNode } from "react";
+import { CalendarDays, MapPin, Search, Users } from "lucide-react";
+import { ButtonCTA } from "../../ui/ButtonCTA";
+
+type SearchBarProps = {
+  destination: string;
+  date: string;
+  participants: number | string;
+  onDestinationChange: (value: string) => void;
+  onDateChange: (value: string) => void;
+  onParticipantsChange: (value: string) => void;
+  onSubmit: () => void;
+};
+
+export function SearchBar({
+  destination,
+  date,
+  participants,
+  onDestinationChange,
+  onDateChange,
+  onParticipantsChange,
+  onSubmit
+}: SearchBarProps) {
+  function handleSubmit(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    onSubmit();
+  }
+
+  return (
+    <form
+      className="group grid gap-2 rounded-[14px] border border-travel-border bg-white p-2.5 shadow-[0_14px_38px_rgba(26,26,26,0.09)] transition duration-200 hover:shadow-[0_16px_42px_rgba(26,26,26,0.11)] focus-within:border-travel-primary/35 md:grid-cols-[1.35fr_0.9fr_0.8fr_auto] md:items-center md:gap-0"
+      onSubmit={handleSubmit}
+    >
+      <SearchField
+        icon={<MapPin className="size-5 text-travel-primary" />}
+        label="Destination"
+      >
+        <input
+          className="w-full bg-transparent font-interface text-[15px] font-medium text-travel-dark outline-none placeholder:text-travel-muted/70"
+          onChange={(event) => onDestinationChange(event.target.value)}
+          placeholder="Where are you going?"
+          type="text"
+          value={destination}
+        />
+      </SearchField>
+
+      <SearchField
+        className="md:border-l md:border-travel-border"
+        icon={<CalendarDays className="size-5 text-travel-secondary" />}
+        label="Date"
+      >
+        <input
+          className="w-full bg-transparent font-interface text-[15px] font-medium text-travel-dark outline-none"
+          onChange={(event) => onDateChange(event.target.value)}
+          type="date"
+          value={date}
+        />
+      </SearchField>
+
+      <SearchField
+        className="md:border-l md:border-travel-border"
+        icon={<Users className="size-5 text-travel-primary" />}
+        label="Participants"
+      >
+        <input
+          className="w-full bg-transparent font-interface text-[15px] font-medium text-travel-dark outline-none placeholder:text-travel-muted/70"
+          min={1}
+          onChange={(event) => onParticipantsChange(event.target.value)}
+          placeholder="2"
+          type="number"
+          value={participants}
+        />
+      </SearchField>
+
+      <ButtonCTA
+        className="mt-1 h-11 w-full rounded-[10px] px-5 md:mt-0 md:h-12 md:w-auto md:px-5"
+        leftIcon={<Search className="size-5" />}
+        type="submit"
+      >
+        Search
+      </ButtonCTA>
+    </form>
+  );
+}
+
+function SearchField({
+  label,
+  icon,
+  children,
+  className
+}: {
+  label: string;
+  icon: ReactNode;
+  children: ReactNode;
+  className?: string;
+}) {
+  return (
+    <label
+      className={[
+        "flex min-w-0 items-center gap-3 rounded-[10px] px-3 py-3 transition duration-200 hover:bg-travel-bg focus-within:bg-travel-bg md:px-4",
+        className
+      ]
+        .filter(Boolean)
+        .join(" ")}
+    >
+      <span className="flex size-9 shrink-0 items-center justify-center rounded-travel-md bg-travel-bg">
+        {icon}
+      </span>
+      <span className="min-w-0 flex-1">
+        <span className="block font-brand text-[11px] font-semibold uppercase tracking-[0.12em] text-travel-muted">
+          {label}
+        </span>
+        <span className="mt-1 block">{children}</span>
+      </span>
+    </label>
+  );
+}
