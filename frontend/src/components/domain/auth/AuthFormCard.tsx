@@ -48,7 +48,7 @@ export function AuthFormCard({
     try {
       const auth = await onSubmit(values);
       saveAccessToken(auth.accessToken);
-      router.push(dashboardRouteForRole(auth.user.role));
+      router.push(loginRedirect() || dashboardRouteForRole(auth.user.role));
     } catch (caughtError) {
       setError(caughtError instanceof Error ? caughtError.message : "Authentication failed");
     } finally {
@@ -95,6 +95,11 @@ export function AuthFormCard({
       </AuthShell>
     </div>
   );
+}
+
+function loginRedirect() {
+  if (typeof window === "undefined") return null;
+  return new URLSearchParams(window.location.search).get("redirect");
 }
 
 export function AuthLink({ href, children }: { href: string; children: ReactNode }) {

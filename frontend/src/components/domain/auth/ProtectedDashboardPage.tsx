@@ -204,8 +204,8 @@ function dashboardNavForRole(role: UserRole) {
       { href: routes.adminCategories, icon: Shapes, label: "Categories" },
       { href: routes.adminActivities, icon: ClipboardCheck, label: "Activities" },
       { disabled: true, icon: Users, label: "Partners" },
-      { disabled: true, icon: BookOpen, label: "Bookings" },
-      { disabled: true, icon: CircleDollarSign, label: "Payments" },
+      { href: routes.adminBookings, icon: BookOpen, label: "Bookings" },
+      { href: routes.adminPayments, icon: CircleDollarSign, label: "Payments" },
       { disabled: true, icon: Settings, label: "Settings" }
     ];
   }
@@ -215,15 +215,15 @@ function dashboardNavForRole(role: UserRole) {
       { href: routes.dashboardProfile, icon: User, label: "Account Profile" },
       { href: routes.partnerProfile, icon: Building2, label: "Partner Profile" },
       { href: routes.partnerActivities, icon: FolderKanban, label: "Activities" },
-      { disabled: true, icon: BookOpen, label: "Bookings" },
-      { disabled: true, icon: ScanLine, label: "Validate voucher" },
+      { href: routes.partnerBookings, icon: BookOpen, label: "Bookings" },
+      { href: routes.partnerVouchers, icon: ScanLine, label: "Validate voucher" },
       { disabled: true, icon: Banknote, label: "Payouts" }
     ];
   }
 
   return [
     { href: routes.dashboardProfile, icon: User, label: "Profile" },
-    { disabled: true, icon: BookOpen, label: "Bookings" },
+    { href: routes.bookings, icon: BookOpen, label: "Bookings" },
     { disabled: true, icon: Settings, label: "Settings" }
   ];
 }

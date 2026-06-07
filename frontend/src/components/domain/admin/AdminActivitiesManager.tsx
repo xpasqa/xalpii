@@ -319,7 +319,7 @@ export function AdminActivityReviewManager({ activityId }: { activityId: string 
   }
 
   async function saveActivityInput(input: Partial<PartnerActivityInput>, successMessage: string) {
-    if (!activity) return;
+    if (!activity) return false;
 
     setIsMutating(true);
     setError(null);
@@ -330,8 +330,10 @@ export function AdminActivityReviewManager({ activityId }: { activityId: string 
       setActivity(updated);
       setForm(activityToForm(updated));
       setMessage(successMessage);
+      return true;
     } catch (caughtError) {
       setError(caughtError instanceof Error ? caughtError.message : "Unable to save activity");
+      return false;
     } finally {
       setIsMutating(false);
     }
@@ -339,8 +341,8 @@ export function AdminActivityReviewManager({ activityId }: { activityId: string 
 
   async function saveContent(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
-    await saveActivityInput(formToInput(form), "Activity content saved.");
-    setIsEditing(false);
+    const didSave = await saveActivityInput(formToInput(form), "Basic details saved.");
+    if (didSave) setIsEditing(false);
   }
 
   useEffect(() => {
@@ -420,46 +422,62 @@ export function AdminActivityReviewManager({ activityId }: { activityId: string 
           </div>
         </div>
         <div className="flex flex-wrap gap-2">
-          <ButtonCTA
-            disabled={isMutating}
-            leftIcon={<Pencil className="size-4" />}
-            onClick={() => {
-              setForm(activityToForm(activity));
-              setIsEditing(true);
-              setMessage(null);
-              setError(null);
-            }}
-            size="sm"
-            variant="outline"
-          >
-            Edit
-          </ButtonCTA>
-          <ButtonCTA
-            disabled={isMutating}
-            leftIcon={<CheckCircle2 className="size-4" />}
-            onClick={() => void mutate("approve")}
-            size="sm"
-            variant="secondary"
-          >
-            Approve
-          </ButtonCTA>
-          <ButtonCTA
-            disabled={isMutating}
-            leftIcon={<Send className="size-4" />}
-            onClick={() => void mutate("publish")}
-            size="sm"
-          >
-            Publish
-          </ButtonCTA>
-          <ButtonCTA
-            disabled={isMutating}
-            leftIcon={<Archive className="size-4" />}
-            onClick={() => void mutate("archive")}
-            size="sm"
-            variant="outline"
-          >
-            Archive
-          </ButtonCTA>
+          {isEditing ? (
+            <ButtonCTA
+              disabled={isMutating}
+              onClick={() => {
+                setForm(activityToForm(activity));
+                setIsEditing(false);
+              }}
+              size="sm"
+              variant="outline"
+            >
+              Back to review
+            </ButtonCTA>
+          ) : (
+            <>
+              <ButtonCTA
+                disabled={isMutating}
+                leftIcon={<Pencil className="size-4" />}
+                onClick={() => {
+                  setForm(activityToForm(activity));
+                  setIsEditing(true);
+                  setMessage(null);
+                  setError(null);
+                }}
+                size="sm"
+                variant="outline"
+              >
+                Edit
+              </ButtonCTA>
+              <ButtonCTA
+                disabled={isMutating}
+                leftIcon={<CheckCircle2 className="size-4" />}
+                onClick={() => void mutate("approve")}
+                size="sm"
+                variant="secondary"
+              >
+                Approve
+              </ButtonCTA>
+              <ButtonCTA
+                disabled={isMutating}
+                leftIcon={<Send className="size-4" />}
+                onClick={() => void mutate("publish")}
+                size="sm"
+              >
+                Publish
+              </ButtonCTA>
+              <ButtonCTA
+                disabled={isMutating}
+                leftIcon={<Archive className="size-4" />}
+                onClick={() => void mutate("archive")}
+                size="sm"
+                variant="outline"
+              >
+                Archive
+              </ButtonCTA>
+            </>
+          )}
         </div>
       </div>
 
@@ -470,15 +488,20 @@ export function AdminActivityReviewManager({ activityId }: { activityId: string 
         </div>
       ) : null}
 
-      <div className="grid gap-5 lg:grid-cols-[minmax(0,1fr)_360px]">
-        <div className="grid gap-5">
-          {isEditing ? (
-            <>
-              <div className="flex items-center justify-between rounded-travel-lg border border-[#2B2B2B]/15 bg-white p-4">
+      {isEditing ? (
+        <div className="grid gap-5 xl:grid-cols-[minmax(0,1fr)_360px]">
+          <div className="grid gap-5">
+            <div className="rounded-travel-lg border border-[#2B2B2B]/15 bg-white p-5 shadow-sm">
+              <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
                 <div>
-                  <p className="font-brand text-lg font-semibold text-travel-dark">Edit activity</p>
-                  <p className="mt-1 text-sm text-travel-muted">
-                    Admin edits use the same section structure as the partner builder.
+                  <p className="font-interface text-xs font-semibold uppercase tracking-[0.14em] text-travel-muted">
+                    Admin builder
+                  </p>
+                  <h3 className="mt-2 font-brand text-xl font-semibold text-travel-dark">
+                    Edit activity content
+                  </h3>
+                  <p className="mt-1 max-w-3xl text-sm leading-6 text-travel-muted">
+                    Use the same structured activity builder partners use, then return to review for approval actions.
                   </p>
                 </div>
                 <ButtonCTA
@@ -488,212 +511,248 @@ export function AdminActivityReviewManager({ activityId }: { activityId: string 
                   }}
                   size="sm"
                   type="button"
-                  variant="ghost"
+                  variant="outline"
                 >
-                  Cancel
+                  Back to review
                 </ButtonCTA>
               </div>
-              <ActivityForm
-                error={null}
-                form={form}
-                isSaving={isMutating}
-                lookups={lookups}
-                onChange={setForm}
-                onSubmit={saveContent}
-                submitLabel="Save basic details"
-              />
-              <AdminRepeatableContentCard
-                form={form}
-                isSaving={isMutating}
-                onAdd={(field) => setTextItemModal({ field, value: "" })}
-                onChange={setForm}
-                onDelete={(field, index) => {
-                  const next = removeAt(lines(form[field]), index);
-                  const nextForm = { ...form, [field]: next.join("\n") };
-                  setForm(nextForm);
-                  void saveActivityInput({ [field]: next }, `${formatTextArrayField(field)} saved.`);
-                }}
-                onEdit={(field, index) =>
-                  setTextItemModal({ field, index, value: lines(form[field])[index] ?? "" })
-                }
-              />
-              <AdminItineraryEditorCard
-                disabled={isMutating}
-                items={toItineraryStops(form.itinerary)}
-                onAdd={() => setItineraryModal({ value: emptyItineraryStop })}
-                onDelete={(index) => {
-                  const next = removeAt(toItineraryStops(form.itinerary), index);
-                  const nextForm = { ...form, itinerary: JSON.stringify(next, null, 2) };
-                  setForm(nextForm);
-                  void saveActivityInput({ itinerary: next }, "Itinerary saved.");
-                }}
-                onEdit={(index) =>
-                  setItineraryModal({
-                    index,
-                    value: toItineraryStops(form.itinerary)[index] ?? emptyItineraryStop
-                  })
-                }
-                onMove={(index, direction) => {
-                  const next = moveItem(toItineraryStops(form.itinerary), index, direction);
-                  const nextForm = { ...form, itinerary: JSON.stringify(next, null, 2) };
-                  setForm(nextForm);
-                  void saveActivityInput({ itinerary: next }, "Itinerary saved.");
-                }}
-              />
-              <AdminPoliciesCard
-                form={form}
-                isSaving={isMutating}
-                onChange={setForm}
-                onSave={() =>
-                  void saveActivityInput(
-                    {
-                      cancellationPolicy: form.cancellationPolicy || undefined,
-                      importantInfo: form.importantInfo || undefined
-                    },
-                    "Policies saved."
-                  )
-                }
-              />
-              <AdminPricingCard activity={activity} onUpdated={loadActivity} />
-              <AdminAvailabilityCard activity={activity} onUpdated={loadActivity} />
-              <AdminMediaCard activity={activity} onUpdated={loadActivity} />
-            </>
-          ) : null}
+            </div>
+            <ActivityForm
+              error={null}
+              form={form}
+              isSaving={isMutating}
+              lookups={lookups}
+              onChange={setForm}
+              onSubmit={saveContent}
+              submitLabel="Save basic details"
+            />
+            <AdminRepeatableContentCard
+              form={form}
+              isSaving={isMutating}
+              onAdd={(field) => setTextItemModal({ field, value: "" })}
+              onChange={setForm}
+              onDelete={(field, index) => {
+                const next = removeAt(lines(form[field]), index);
+                const nextForm = { ...form, [field]: next.join("\n") };
+                setForm(nextForm);
+                void saveActivityInput({ [field]: next }, `${formatTextArrayField(field)} saved.`);
+              }}
+              onEdit={(field, index) =>
+                setTextItemModal({ field, index, value: lines(form[field])[index] ?? "" })
+              }
+            />
+            <AdminItineraryEditorCard
+              disabled={isMutating}
+              items={toItineraryStops(form.itinerary)}
+              onAdd={() => setItineraryModal({ value: emptyItineraryStop })}
+              onDelete={(index) => {
+                const next = removeAt(toItineraryStops(form.itinerary), index);
+                const nextForm = { ...form, itinerary: JSON.stringify(next, null, 2) };
+                setForm(nextForm);
+                void saveActivityInput({ itinerary: next }, "Itinerary saved.");
+              }}
+              onEdit={(index) =>
+                setItineraryModal({
+                  index,
+                  value: toItineraryStops(form.itinerary)[index] ?? emptyItineraryStop
+                })
+              }
+              onMove={(index, direction) => {
+                const next = moveItem(toItineraryStops(form.itinerary), index, direction);
+                const nextForm = { ...form, itinerary: JSON.stringify(next, null, 2) };
+                setForm(nextForm);
+                void saveActivityInput({ itinerary: next }, "Itinerary saved.");
+              }}
+            />
+            <AdminPoliciesCard
+              form={form}
+              isSaving={isMutating}
+              onChange={setForm}
+              onSave={() =>
+                void saveActivityInput(
+                  {
+                    cancellationPolicy: form.cancellationPolicy || undefined,
+                    importantInfo: form.importantInfo || undefined
+                  },
+                  "Policies saved."
+                )
+              }
+            />
+            <AdminPricingCard activity={activity} onUpdated={loadActivity} />
+            <AdminAvailabilityCard activity={activity} onUpdated={loadActivity} />
+            <AdminMediaCard activity={activity} onUpdated={loadActivity} />
+          </div>
 
-          <Card>
-            {coverImage ? (
-              <img
-                alt={activity.title}
-                className="aspect-[16/7] w-full rounded-t-travel-lg object-cover"
-                src={coverImage}
-              />
-            ) : null}
-            <CardHeader>
-              <CardTitle>Content review</CardTitle>
-              <CardDescription>{activity.shortDescription}</CardDescription>
-            </CardHeader>
-            <CardContent className="space-y-6">
-              <ReviewBlock title="Description">
-                <p>{activity.description}</p>
-              </ReviewBlock>
-              <div className="grid gap-5 md:grid-cols-2">
-                <ReviewList title="Highlights" items={activity.highlights} />
-                <ReviewList title="Included" items={activity.included} />
-                <ReviewList title="Not included" items={activity.notIncluded} />
-                <ReviewBlock title="Important information">
-                  <p>{activity.importantInfo || "No important information provided."}</p>
-                </ReviewBlock>
-              </div>
-              <ReviewBlock title="Itinerary">
-                <ItineraryTimeline items={toItineraryStops(JSON.stringify(activity.itinerary ?? []))} />
-              </ReviewBlock>
-            </CardContent>
-          </Card>
-
-          <Card>
-            <CardHeader>
-              <CardTitle>Media</CardTitle>
-              <CardDescription>Images attached by the partner.</CardDescription>
-            </CardHeader>
-            <CardContent>
-              {activity.media.length ? (
-                <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
-                  {activity.media.map((media) => (
-                    <div className="overflow-hidden rounded-travel-lg border border-travel-border" key={media.id}>
-                      <img
-                        alt={media.altText ?? activity.title}
-                        className="aspect-[4/3] w-full object-cover"
-                        src={media.url ?? media.file?.url ?? ""}
-                      />
-                      <div className="p-3">
-                        <p className="truncate font-interface text-xs text-travel-muted">
-                          {media.isCover ? "Cover image" : media.altText ?? "Gallery image"}
-                        </p>
-                      </div>
-                    </div>
-                  ))}
-                </div>
-              ) : (
-                <EmptyState title="No media" description="This activity has no attached images yet." />
-              )}
-            </CardContent>
-          </Card>
+          <aside className="xl:sticky xl:top-24 xl:self-start">
+            <AdminEditStatusPanel
+              activity={activity}
+              form={form}
+              isMutating={isMutating}
+              onBackToReview={() => {
+                setForm(activityToForm(activity));
+                setIsEditing(false);
+              }}
+            />
+          </aside>
         </div>
+      ) : (
+        <div className="grid gap-5 lg:grid-cols-[minmax(0,1fr)_360px]">
+          <div className="grid gap-5">
+            <Card>
+              {coverImage ? (
+                <img
+                  alt={activity.title}
+                  className="aspect-[16/7] w-full rounded-t-travel-lg object-cover"
+                  src={coverImage}
+                />
+              ) : null}
+              <CardHeader>
+                <CardTitle>Content review</CardTitle>
+                <CardDescription>{activity.shortDescription}</CardDescription>
+              </CardHeader>
+              <CardContent className="space-y-6">
+                <ReviewBlock title="Description">
+                  <p>{activity.description}</p>
+                </ReviewBlock>
+                <div className="grid gap-5 md:grid-cols-2">
+                  <ReviewList title="Highlights" items={activity.highlights} />
+                  <ReviewList title="Included" items={activity.included} />
+                  <ReviewList title="Not included" items={activity.notIncluded} />
+                  <ReviewBlock title="Important information">
+                    <p>{activity.importantInfo || "No important information provided."}</p>
+                  </ReviewBlock>
+                </div>
+                <ReviewBlock title="Itinerary">
+                  <ItineraryTimeline items={toItineraryStops(JSON.stringify(activity.itinerary ?? []))} />
+                </ReviewBlock>
+              </CardContent>
+            </Card>
 
-        <aside className="space-y-5">
-          <Card>
-            <CardHeader>
-              <CardTitle>Commercial details</CardTitle>
-            </CardHeader>
-            <CardContent className="space-y-4">
-              <DetailLine label="Price" value={formatActivityPrice(activity)} />
-              <DetailLine label="Duration" value={activity.durationLabel ?? "Not provided"} />
-              <DetailLine label="Meeting point" value={activity.meetingPoint ?? "Not provided"} />
-              <DetailLine
-                label="Cancellation"
-                value={activity.cancellationPolicy ?? "Not provided"}
-              />
-              <DetailLine
-                label="Published"
-                value={activity.publishedAt ? new Date(activity.publishedAt).toLocaleString() : "No"}
-              />
-            </CardContent>
-          </Card>
-
-          <Card>
-            <CardHeader>
-              <CardTitle>Availability</CardTitle>
-            </CardHeader>
-            <CardContent className="space-y-3">
-              {activity.availability?.length ? (
-                activity.availability.map((slot) => (
-                  <div className="rounded-travel-md border border-travel-border p-3" key={slot.id}>
-                    <p className="font-interface text-sm font-semibold text-travel-dark">
-                      {new Date(slot.startDateTime).toLocaleString()}
-                    </p>
-                    <p className="mt-1 font-interface text-xs text-travel-muted">
-                      Capacity {slot.capacity ?? "unlimited"} · Booked {slot.bookedCount}
-                    </p>
+            <Card>
+              <CardHeader>
+                <CardTitle>Media</CardTitle>
+                <CardDescription>Images attached by the partner.</CardDescription>
+              </CardHeader>
+              <CardContent>
+                {activity.media.length ? (
+                  <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
+                    {activity.media.map((media) => (
+                      <div className="overflow-hidden rounded-travel-lg border border-travel-border" key={media.id}>
+                        <img
+                          alt={media.altText ?? activity.title}
+                          className="aspect-[4/3] w-full object-cover"
+                          src={media.url ?? media.file?.url ?? ""}
+                        />
+                        <div className="p-3">
+                          <p className="truncate font-interface text-xs text-travel-muted">
+                            {media.isCover ? "Cover image" : media.altText ?? "Gallery image"}
+                          </p>
+                        </div>
+                      </div>
+                    ))}
                   </div>
-                ))
-              ) : (
-                <p className="font-interface text-sm text-travel-muted">No availability slots yet.</p>
-              )}
-            </CardContent>
-          </Card>
+                ) : (
+                  <EmptyState title="No media" description="This activity has no attached images yet." />
+                )}
+              </CardContent>
+            </Card>
+          </div>
 
-          <Card>
-            <CardHeader>
-              <CardTitle>Revision or rejection</CardTitle>
-              <CardDescription>
-                Request revision lets the partner edit this activity. Reject is final for this submission.
-              </CardDescription>
-            </CardHeader>
-            <CardContent className="grid gap-3">
-              <ButtonCTA
-                disabled={isMutating}
-                fullWidth
-                leftIcon={<Pencil className="size-4" />}
-                onClick={() => setReviewActionModal({ action: "revision", reason: "" })}
-                type="button"
-                variant="outline"
-              >
-                Request revision
-              </ButtonCTA>
-              <ButtonCTA
-                disabled={isMutating}
-                fullWidth
-                leftIcon={<XCircle className="size-4" />}
-                onClick={() => setReviewActionModal({ action: "reject", reason: "" })}
-                type="button"
-                variant="danger"
-              >
-                Reject final
-              </ButtonCTA>
-            </CardContent>
-          </Card>
-        </aside>
-      </div>
+          <aside className="space-y-5">
+            <Card>
+              <CardHeader>
+                <CardTitle>Commercial details</CardTitle>
+              </CardHeader>
+              <CardContent className="space-y-4">
+                <DetailLine
+                  label="Pricing model"
+                  value={activity.pricingMode === "GROUP_TIER" ? "Group tier pricing" : "Simple per-person"}
+                />
+                <DetailLine label="Price" value={formatActivityPrice(activity)} />
+                {activity.pricingMode === "GROUP_TIER" && activity.pricingTiers.length ? (
+                  <div className="overflow-hidden rounded-travel-md border border-[#2B2B2B]/15">
+                    <div className="grid grid-cols-3 gap-2 bg-travel-bg px-3 py-2 text-[11px] font-semibold text-travel-muted">
+                      <span>Travelers</span>
+                      <span>Adult</span>
+                      <span>Child</span>
+                    </div>
+                    {activity.pricingTiers.map((tier) => (
+                      <div className="grid grid-cols-3 gap-2 border-t border-[#2B2B2B]/10 px-3 py-2 text-xs" key={tier.id}>
+                        <span>{tier.minTravelers === tier.maxTravelers ? tier.minTravelers : `${tier.minTravelers}-${tier.maxTravelers}`}</span>
+                        <span>{formatMoney(tier.adultPriceCents, tier.currency)}</span>
+                        <span>{formatMoney(tier.childPriceCents ?? Math.round(tier.adultPriceCents * 0.73), tier.currency)}</span>
+                      </div>
+                    ))}
+                  </div>
+                ) : null}
+                <DetailLine label="Duration" value={activity.durationLabel ?? "Not provided"} />
+                <DetailLine label="Meeting point" value={activity.meetingPoint ?? "Not provided"} />
+                <DetailLine
+                  label="Cancellation"
+                  value={activity.cancellationPolicy ?? "Not provided"}
+                />
+                <DetailLine
+                  label="Published"
+                  value={activity.publishedAt ? new Date(activity.publishedAt).toLocaleString() : "No"}
+                />
+              </CardContent>
+            </Card>
+
+            <Card>
+              <CardHeader>
+                <CardTitle>Availability</CardTitle>
+              </CardHeader>
+              <CardContent className="space-y-3">
+                {activity.availability?.length ? (
+                  activity.availability.map((slot) => (
+                    <div className="rounded-travel-md border border-travel-border p-3" key={slot.id}>
+                      <p className="font-interface text-sm font-semibold text-travel-dark">
+                        {new Date(slot.startDateTime).toLocaleString()}
+                      </p>
+                      <p className="mt-1 font-interface text-xs text-travel-muted">
+                        Capacity {slot.capacity ?? "unlimited"} · Booked {slot.bookedCount}
+                      </p>
+                    </div>
+                  ))
+                ) : (
+                  <p className="font-interface text-sm text-travel-muted">No availability slots yet.</p>
+                )}
+              </CardContent>
+            </Card>
+
+            <Card>
+              <CardHeader>
+                <CardTitle>Revision or rejection</CardTitle>
+                <CardDescription>
+                  Request revision lets the partner edit this activity. Reject is final for this submission.
+                </CardDescription>
+              </CardHeader>
+              <CardContent className="grid gap-3">
+                <ButtonCTA
+                  disabled={isMutating}
+                  fullWidth
+                  leftIcon={<Pencil className="size-4" />}
+                  onClick={() => setReviewActionModal({ action: "revision", reason: "" })}
+                  type="button"
+                  variant="outline"
+                >
+                  Request revision
+                </ButtonCTA>
+                <ButtonCTA
+                  disabled={isMutating}
+                  fullWidth
+                  leftIcon={<XCircle className="size-4" />}
+                  onClick={() => setReviewActionModal({ action: "reject", reason: "" })}
+                  type="button"
+                  variant="danger"
+                >
+                  Reject final
+                </ButtonCTA>
+              </CardContent>
+            </Card>
+          </aside>
+        </div>
+      )}
       <TextItemDialog
         modal={textItemModal}
         onClose={() => setTextItemModal(null)}
@@ -756,59 +815,96 @@ function ActivityForm({
 
   return (
     <Card>
-      <CardHeader>
+      <CardHeader className="pb-3">
         <CardTitle>Basic details</CardTitle>
-        <CardDescription>Core content, destination, category, duration, and meeting point.</CardDescription>
+        <CardDescription>Core listing content, destination, duration, and meeting point.</CardDescription>
       </CardHeader>
       <CardContent>
-    <form className="grid gap-6" onSubmit={onSubmit}>
-      <div className="grid gap-4 md:grid-cols-2">
-        <Field label="Activity title" required>
-          <Input onChange={(event) => update("title", event.target.value)} required value={form.title} />
-        </Field>
-        <Field label="Slug">
-          <Input onChange={(event) => update("slug", event.target.value)} placeholder="e.g. ubud-cooking-class-market-visit" value={form.slug} />
-        </Field>
-        <Field label="City" required>
-          <Select onChange={(event) => update("cityId", event.target.value)} required value={form.cityId}>
-            {lookups.cities.map((city) => (
-              <option key={city.id} value={city.id}>
-                {city.name}, {city.country}
-              </option>
-            ))}
-          </Select>
-        </Field>
-        <Field label="Category" required>
-          <Select onChange={(event) => update("categoryId", event.target.value)} required value={form.categoryId}>
-            {lookups.categories.map((category) => (
-              <option key={category.id} value={category.id}>
-                {category.name}
-              </option>
-            ))}
-          </Select>
-        </Field>
-      </div>
-      <Field label="Short description" required>
-        <Textarea className="min-h-24" onChange={(event) => update("shortDescription", event.target.value)} required value={form.shortDescription} />
-      </Field>
-      <Field label="Full description" required>
-        <Textarea className="min-h-40" onChange={(event) => update("description", event.target.value)} required value={form.description} />
-      </Field>
-      <div className="grid gap-4 md:grid-cols-2">
-        <Field label="Duration label">
-          <Input onChange={(event) => update("durationLabel", event.target.value)} placeholder="e.g. 3.5 hours" value={form.durationLabel} />
-        </Field>
-        <Field label="Meeting point">
-          <Input onChange={(event) => update("meetingPoint", event.target.value)} value={form.meetingPoint} />
-        </Field>
-      </div>
-      <div className="flex flex-wrap items-center gap-3 md:col-span-2">
-        <ButtonCTA disabled={isSaving} type="submit">
-          {isSaving ? "Saving..." : submitLabel}
-        </ButtonCTA>
-        {error ? <span className="text-sm font-medium text-red-700">{error}</span> : null}
-      </div>
-    </form>
+        <form className="grid gap-5" onSubmit={onSubmit}>
+          <div className="grid gap-4 lg:grid-cols-12">
+            <Field className="lg:col-span-5" label="Activity title" required>
+              <Input
+                className="h-11 min-h-0"
+                onChange={(event) => update("title", event.target.value)}
+                required
+                value={form.title}
+              />
+            </Field>
+            <Field className="lg:col-span-4" label="Slug">
+              <Input
+                className="h-11 min-h-0"
+                onChange={(event) => update("slug", event.target.value)}
+                placeholder="e.g. ubud-cooking-class-market-visit"
+                value={form.slug}
+              />
+            </Field>
+            <Field className="lg:col-span-3" label="Duration label">
+              <Input
+                className="h-11 min-h-0"
+                onChange={(event) => update("durationLabel", event.target.value)}
+                placeholder="e.g. 3.5 hours"
+                value={form.durationLabel}
+              />
+            </Field>
+            <Field className="lg:col-span-6" label="City" required>
+              <Select
+                className="h-11 min-h-0"
+                onChange={(event) => update("cityId", event.target.value)}
+                required
+                value={form.cityId}
+              >
+                {lookups.cities.map((city) => (
+                  <option key={city.id} value={city.id}>
+                    {city.name}, {city.country}
+                  </option>
+                ))}
+              </Select>
+            </Field>
+            <Field className="lg:col-span-6" label="Category" required>
+              <Select
+                className="h-11 min-h-0"
+                onChange={(event) => update("categoryId", event.target.value)}
+                required
+                value={form.categoryId}
+              >
+                {lookups.categories.map((category) => (
+                  <option key={category.id} value={category.id}>
+                    {category.name}
+                  </option>
+                ))}
+              </Select>
+            </Field>
+          </div>
+          <Field label="Short description" required>
+            <Textarea
+              className="min-h-24 resize-y"
+              onChange={(event) => update("shortDescription", event.target.value)}
+              required
+              value={form.shortDescription}
+            />
+          </Field>
+          <Field label="Full description" required>
+            <Textarea
+              className="min-h-36 resize-y"
+              onChange={(event) => update("description", event.target.value)}
+              required
+              value={form.description}
+            />
+          </Field>
+          <Field label="Meeting point">
+            <Input
+              className="h-11 min-h-0"
+              onChange={(event) => update("meetingPoint", event.target.value)}
+              value={form.meetingPoint}
+            />
+          </Field>
+          <div className="flex flex-wrap items-center gap-3 border-t border-[#2B2B2B]/10 pt-5">
+            <ButtonCTA disabled={isSaving} size="sm" type="submit">
+              {isSaving ? "Saving..." : submitLabel}
+            </ButtonCTA>
+            {error ? <span className="text-sm font-medium text-red-700">{error}</span> : null}
+          </div>
+        </form>
       </CardContent>
     </Card>
   );
@@ -816,18 +912,20 @@ function ActivityForm({
 
 function Field({
   children,
+  className,
   hint,
   label,
   required
 }: {
   children: ReactNode;
+  className?: string;
   hint?: string;
   label: string;
   required?: boolean;
 }) {
   return (
-    <label className="grid gap-2">
-      <span className="font-interface text-sm font-semibold text-travel-dark">
+    <label className={`grid content-start gap-2 ${className ?? ""}`}>
+      <span className="font-interface text-xs font-semibold uppercase tracking-[0.08em] text-travel-muted">
         {label}
         {required ? <span className="text-travel-primary"> *</span> : null}
       </span>
@@ -1229,6 +1327,37 @@ function AdminPricingCard({
     }
   }
 
+  if (activity.pricingMode === "GROUP_TIER") {
+    return (
+      <Card>
+        <CardHeader>
+          <CardTitle>Pricing tiers</CardTitle>
+          <CardDescription>
+            Group pricing is reviewed here. Partners manage tier ranges and child discounts in their activity builder.
+          </CardDescription>
+        </CardHeader>
+        <CardContent>
+          <div className="overflow-hidden rounded-travel-lg border border-[#2B2B2B]/15">
+            <div className="grid grid-cols-4 gap-3 bg-travel-bg px-4 py-2.5 text-xs font-semibold text-travel-muted">
+              <span>Travelers</span>
+              <span>Adult</span>
+              <span>Child</span>
+              <span>Discount</span>
+            </div>
+            {activity.pricingTiers.map((tier) => (
+              <div className="grid grid-cols-4 gap-3 border-t border-[#2B2B2B]/10 px-4 py-3 text-sm" key={tier.id}>
+                <span>{tier.minTravelers === tier.maxTravelers ? tier.minTravelers : `${tier.minTravelers}-${tier.maxTravelers}`}</span>
+                <span>{formatMoney(tier.adultPriceCents, tier.currency)}</span>
+                <span>{formatMoney(tier.childPriceCents ?? Math.round(tier.adultPriceCents * 0.73), tier.currency)}</span>
+                <span>{Number(tier.childDiscountPercent ?? 27)}%</span>
+              </div>
+            ))}
+          </div>
+        </CardContent>
+      </Card>
+    );
+  }
+
   return (
     <Card>
       <CardHeader>
@@ -1496,11 +1625,100 @@ function DetailLine({ label, value }: { label: string; value: string }) {
   );
 }
 
+function AdminEditStatusPanel({
+  activity,
+  form,
+  isMutating,
+  onBackToReview
+}: {
+  activity: AdminActivity;
+  form: ActivityFormState;
+  isMutating: boolean;
+  onBackToReview: () => void;
+}) {
+  const readiness = getAdminEditReadiness(activity, form);
+
+  return (
+    <Card>
+      <CardHeader>
+        <CardTitle>Admin builder</CardTitle>
+        <CardDescription>
+          Edit the submitted activity with the same structure partners use.
+        </CardDescription>
+      </CardHeader>
+      <CardContent className="space-y-5">
+        <div className="rounded-travel-lg border border-[#2B2B2B]/15 bg-travel-bg p-4">
+          <div className="flex items-center justify-between gap-3">
+            <span className="font-interface text-sm font-semibold text-travel-dark">Current status</span>
+            <ActivityStatusBadge status={activity.status} />
+          </div>
+          <div className="mt-4 grid gap-3">
+            <DetailLine label="Partner" value={activity.partner.businessName} />
+            <DetailLine label="Destination" value={`${activity.city.name} · ${activity.category.name}`} />
+            <DetailLine label="Price" value={formatActivityPrice(activity)} />
+            <DetailLine label="Updated" value={formatDate(activity.updatedAt)} />
+          </div>
+        </div>
+
+        <div>
+          <p className="font-brand text-base font-semibold text-travel-dark">Content readiness</p>
+          <div className="mt-3 grid gap-2">
+            {readiness.map((item) => (
+              <div
+                className="flex items-center justify-between rounded-travel-md border border-[#2B2B2B]/10 bg-white px-3 py-2"
+                key={item.label}
+              >
+                <span className="text-sm text-travel-dark">{item.label}</span>
+                <Badge variant={item.done ? "success" : "neutral"}>
+                  {item.done ? "Done" : "Missing"}
+                </Badge>
+              </div>
+            ))}
+          </div>
+        </div>
+
+        <div className="rounded-travel-md border border-[#2B2B2B]/10 bg-white p-3 text-sm leading-6 text-travel-muted">
+          Approval, publish, revision, reject, and archive actions stay in review mode so editing and review decisions do not mix.
+        </div>
+
+        <ButtonCTA disabled={isMutating} fullWidth onClick={onBackToReview} type="button" variant="outline">
+          Back to review
+        </ButtonCTA>
+      </CardContent>
+    </Card>
+  );
+}
+
 function formatActivityPrice(activity: AdminActivity) {
   const pricing = activity.pricing.find((item) => item.isActive) ?? activity.pricing[0];
   if (!pricing) return "No pricing";
 
   return formatMoney(pricing.priceCents, pricing.currency);
+}
+
+function getAdminEditReadiness(activity: AdminActivity, form: ActivityFormState) {
+  const hasBasic =
+    Boolean(form.title.trim()) &&
+    Boolean(form.cityId) &&
+    Boolean(form.categoryId) &&
+    Boolean(form.shortDescription.trim()) &&
+    Boolean(form.description.trim());
+  const hasPricing = activity.pricing.some((price) => price.isActive);
+  const hasAvailability = (activity.availability ?? []).some((slot) => slot.isActive);
+  const hasMedia = activity.media.length > 0;
+  const hasItinerary = toItineraryStops(form.itinerary).length > 0;
+  const hasIncludes = lines(form.included).length > 0 && lines(form.notIncluded).length > 0;
+  const hasPolicies = Boolean(form.cancellationPolicy.trim()) || Boolean(form.importantInfo.trim());
+
+  return [
+    { done: hasBasic, label: "Basic details" },
+    { done: hasPricing, label: "Pricing" },
+    { done: hasAvailability, label: "Availability" },
+    { done: hasMedia, label: "Media" },
+    { done: hasItinerary, label: "Itinerary" },
+    { done: hasIncludes, label: "Included / not included" },
+    { done: hasPolicies, label: "Policies" }
+  ];
 }
 
 function activityToForm(activity: AdminActivity): ActivityFormState {

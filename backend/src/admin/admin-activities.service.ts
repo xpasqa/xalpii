@@ -29,6 +29,10 @@ const adminActivityListInclude = {
     where: { isActive: true },
     orderBy: { createdAt: "desc" },
     take: 1
+  },
+  pricingTiers: {
+    where: { isActive: true },
+    orderBy: [{ minTravelers: "asc" }, { maxTravelers: "asc" }]
   }
 } satisfies Prisma.ActivityInclude;
 
@@ -55,6 +59,9 @@ const adminActivityDetailInclude = {
   },
   pricing: {
     orderBy: { createdAt: "desc" }
+  },
+  pricingTiers: {
+    orderBy: [{ minTravelers: "asc" }, { maxTravelers: "asc" }]
   },
   reviews: {
     orderBy: { createdAt: "desc" },
@@ -152,6 +159,13 @@ export class AdminActivitiesService {
   async upsertPricing(id: string, actorUserId: string, dto: UpsertAdminActivityPricingDto) {
     const activity = await this.get(id);
     const isActive = dto.isActive ?? true;
+    if (!dto.priceCents) {
+      throw new BadRequestException({
+        code: "ACTIVITY_SIMPLE_PRICE_REQUIRED",
+        message: "A positive simple price is required"
+      });
+    }
+    const priceCents = dto.priceCents;
 
     const pricing = await this.prisma.$transaction(async (tx) => {
       if (isActive) {
@@ -166,8 +180,8 @@ export class AdminActivitiesService {
           activityId: activity.id,
           currency: dto.currency.trim().toUpperCase(),
           isActive,
-          priceCents: dto.priceCents,
-          priceType: dto.priceType.trim()
+          priceCents,
+          priceType: dto.priceType?.trim() || "per_person"
         }
       });
     });

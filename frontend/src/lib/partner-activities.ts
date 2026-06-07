@@ -1,6 +1,7 @@
 import { apiFetch } from "./api";
 import { getAccessToken } from "./auth";
 import type { FileAsset } from "./files";
+import type { ActivityPricingTier, PricingMode } from "./activity-pricing";
 
 export type ActivityStatus =
   | "DRAFT"
@@ -37,6 +38,19 @@ export type PartnerActivityPricing = {
   updatedAt: string;
 };
 
+export type PartnerActivityPricingTier = ActivityPricingTier & {
+  id: string;
+  activityId: string;
+  createdAt: string;
+  updatedAt: string;
+};
+
+export type PartnerActivityPricingConfig = {
+  pricingMode: PricingMode;
+  pricing: PartnerActivityPricing[];
+  pricingTiers: PartnerActivityPricingTier[];
+};
+
 export type PartnerActivityAvailability = {
   id: string;
   activityId: string;
@@ -71,6 +85,7 @@ export type PartnerActivity = {
   shortDescription: string;
   description: string;
   status: ActivityStatus;
+  pricingMode: PricingMode;
   durationLabel?: string | null;
   meetingPoint?: string | null;
   cancellationPolicy?: string | null;
@@ -88,6 +103,7 @@ export type PartnerActivity = {
   category: LookupCategory;
   media: PartnerActivityMedia[];
   pricing: PartnerActivityPricing[];
+  pricingTiers: PartnerActivityPricingTier[];
   availability?: PartnerActivityAvailability[];
 };
 
@@ -109,10 +125,19 @@ export type PartnerActivityInput = {
 };
 
 export type PartnerPricingInput = {
+  pricingMode?: PricingMode;
   currency: string;
-  priceCents: number;
-  priceType: string;
+  priceCents?: number;
+  priceType?: string;
   isActive?: boolean;
+  tiers?: Array<{
+    minTravelers: number;
+    maxTravelers: number;
+    adultPriceCents: number;
+    childPriceCents?: number;
+    childDiscountPercent?: number;
+    isActive?: boolean;
+  }>;
 };
 
 export type PartnerAvailabilityInput = {
@@ -177,9 +202,17 @@ export async function submitPartnerActivity(id: string) {
 
 export async function upsertPartnerActivityPricing(id: string, input: PartnerPricingInput) {
   return requireData(
-    await authenticatedFetch<PartnerActivityPricing>({
+    await authenticatedFetch<PartnerActivityPricingConfig>({
       body: JSON.stringify(input),
       method: "PUT",
+      path: `/partner/activities/${id}/pricing`
+    })
+  );
+}
+
+export async function getPartnerActivityPricing(id: string) {
+  return requireData(
+    await authenticatedFetch<PartnerActivityPricingConfig>({
       path: `/partner/activities/${id}/pricing`
     })
   );

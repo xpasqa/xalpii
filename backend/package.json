@@ -11,7 +11,7 @@
     "prisma:seed": "prisma db seed",
     "prisma:studio": "prisma studio",
     "db:reset": "prisma migrate reset",
-    "start": "node dist/main.js",
+    "start": "node dist/src/main.js",
     "start:dev": "nest start --watch"
   },
   "prisma": {

@@ -23,6 +23,7 @@ export type AdminActivity = {
   shortDescription: string;
   description: string;
   status: ActivityStatus;
+  pricingMode: import("./activity-pricing").PricingMode;
   durationLabel?: string | null;
   meetingPoint?: string | null;
   cancellationPolicy?: string | null;
@@ -49,6 +50,7 @@ export type AdminActivity = {
   category: LookupCategory;
   media: PartnerActivityMedia[];
   pricing: PartnerActivityPricing[];
+  pricingTiers: import("./partner-activities").PartnerActivityPricingTier[];
   availability?: PartnerActivityAvailability[];
   reviews?: Array<{
     id: string;

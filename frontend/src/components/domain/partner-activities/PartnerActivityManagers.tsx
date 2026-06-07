@@ -102,6 +102,16 @@ type MediaUrlModalState = {
   isCover: boolean;
 } | null;
 
+type PricingTierForm = {
+  index?: number;
+  minTravelers: string;
+  maxTravelers: string;
+  adultPrice: string;
+  childPrice: string;
+  childDiscountPercent: string;
+  isActive: boolean;
+};
+
 const emptyBasicDetails: BasicDetailsState = {
   title: "",
   slug: "",
@@ -1154,12 +1164,20 @@ function PricingSection({
   onUpdated: () => Promise<void>;
 }) {
   const activePrice = activity.pricing.find((price) => price.isActive) ?? activity.pricing[0];
-  const [currency, setCurrency] = useState(activePrice?.currency ?? "USD");
+  const [pricingMode, setPricingMode] = useState(activity.pricingMode ?? "SIMPLE");
+  const [currency, setCurrency] = useState(activePrice?.currency ?? activity.pricingTiers?.[0]?.currency ?? "USD");
   const [majorPrice, setMajorPrice] = useState(activePrice ? centsToMajor(activePrice.priceCents, activePrice.currency) : "");
   const [priceType, setPriceType] = useState(activePrice?.priceType ?? "per_person");
+  const [tiers, setTiers] = useState(activity.pricingTiers ?? []);
+  const [tierModal, setTierModal] = useState<PricingTierForm | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [isSaving, setIsSaving] = useState(false);
   const previewCents = parseMoneyToCents(majorPrice, currency);
+
+  useEffect(() => {
+    setPricingMode(activity.pricingMode ?? "SIMPLE");
+    setTiers(activity.pricingTiers ?? []);
+  }, [activity.pricingMode, activity.pricingTiers]);
 
   async function save(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -1170,8 +1188,20 @@ function PricingSection({
       await upsertPartnerActivityPricing(activity.id, {
         currency,
         isActive: true,
-        priceCents: previewCents,
-        priceType
+        priceCents: pricingMode === "SIMPLE" ? previewCents : undefined,
+        priceType,
+        pricingMode,
+        tiers:
+          pricingMode === "GROUP_TIER"
+            ? tiers.map((tier) => ({
+                adultPriceCents: tier.adultPriceCents,
+                childDiscountPercent: Number(tier.childDiscountPercent ?? 27),
+                childPriceCents: tier.childPriceCents ?? undefined,
+                isActive: tier.isActive,
+                maxTravelers: tier.maxTravelers,
+                minTravelers: tier.minTravelers
+              }))
+            : undefined
       });
       await onUpdated();
     } catch (caughtError) {
@@ -1185,36 +1215,210 @@ function PricingSection({
     <Card>
       <CardHeader>
         <CardTitle>Pricing</CardTitle>
-        <CardDescription>Enter the traveler-facing price in normal currency units.</CardDescription>
+        <CardDescription>
+          Choose a simple per-person price or traveler-count tiers. Tier selection uses the total adults and children.
+        </CardDescription>
       </CardHeader>
       <CardContent>
         <form className="grid gap-4" onSubmit={save}>
-          <div className="grid gap-4 md:grid-cols-[140px_1fr_220px]">
+          <div className="grid gap-4 md:grid-cols-3">
+            <Field label="Pricing model" required>
+              <Select
+                disabled={disabled}
+                onChange={(event) => setPricingMode(event.target.value as "SIMPLE" | "GROUP_TIER")}
+                value={pricingMode}
+              >
+                <option value="SIMPLE">Simple per-person</option>
+                <option value="GROUP_TIER">Group tier pricing</option>
+              </Select>
+            </Field>
             <Field label="Currency" required>
               <Input disabled={disabled} onChange={(event) => setCurrency(event.target.value.toUpperCase())} required value={currency} />
-            </Field>
-            <Field label="Price" required hint="Use major units, e.g. 48.00. Alpii stores the minor-unit amount automatically.">
-              <Input disabled={disabled} min={0} onChange={(event) => setMajorPrice(event.target.value)} required step="0.01" type="number" value={majorPrice} />
             </Field>
             <Field label="Price type" required>
               <Select disabled={disabled} onChange={(event) => setPriceType(event.target.value)} required value={priceType}>
                 <option value="per_person">Per person</option>
-                <option value="per_group">Per group</option>
-                <option value="fixed">Fixed price</option>
               </Select>
             </Field>
           </div>
+
+          {pricingMode === "SIMPLE" ? (
+            <Field label="Adult price" required hint="Use normal currency units, e.g. 48.00.">
+              <Input disabled={disabled} min={0} onChange={(event) => setMajorPrice(event.target.value)} required step="0.01" type="number" value={majorPrice} />
+            </Field>
+          ) : (
+            <div className="grid gap-3">
+              <div className="flex flex-wrap items-center justify-between gap-3">
+                <div>
+                  <p className="text-sm font-semibold text-travel-dark">Traveler tiers</p>
+                  <p className="mt-1 text-xs leading-5 text-travel-muted">
+                    The matching tier is selected from the total number of adults and children.
+                  </p>
+                </div>
+                <div className="flex gap-2">
+                  <ButtonCTA
+                    disabled={disabled || tiers.length === 0}
+                    onClick={() =>
+                      setTiers((current) =>
+                        current.map((tier) => ({
+                          ...tier,
+                          childDiscountPercent: 27,
+                          childPriceCents: Math.round(tier.adultPriceCents * 0.73)
+                        }))
+                      )
+                    }
+                    size="sm"
+                    type="button"
+                    variant="ghost"
+                  >
+                    Apply 27% child discount
+                  </ButtonCTA>
+                  <ButtonCTA
+                    disabled={disabled}
+                    leftIcon={<Plus className="size-4" />}
+                    onClick={() =>
+                      setTierModal({
+                        adultPrice: "",
+                        childDiscountPercent: "27",
+                        childPrice: "",
+                        isActive: true,
+                        maxTravelers: "",
+                        minTravelers: ""
+                      })
+                    }
+                    size="sm"
+                    type="button"
+                    variant="outline"
+                  >
+                    Add tier
+                  </ButtonCTA>
+                </div>
+              </div>
+
+              <div className="overflow-hidden rounded-travel-lg border border-[#2B2B2B]/15">
+                <div className="grid grid-cols-[1fr_1fr_1fr_1fr_auto] gap-3 bg-travel-bg px-4 py-2.5 text-xs font-semibold text-travel-muted">
+                  <span>Travelers</span>
+                  <span>Adult</span>
+                  <span>Child</span>
+                  <span>Discount</span>
+                  <span>Actions</span>
+                </div>
+                {tiers.length ? (
+                  tiers.map((tier, index) => (
+                    <div className="grid grid-cols-[1fr_1fr_1fr_1fr_auto] items-center gap-3 border-t border-[#2B2B2B]/10 px-4 py-3 text-sm" key={tier.id ?? `${tier.minTravelers}-${tier.maxTravelers}`}>
+                      <span>{tier.minTravelers === tier.maxTravelers ? tier.minTravelers : `${tier.minTravelers}-${tier.maxTravelers}`}</span>
+                      <span>{formatMoney(tier.adultPriceCents, tier.currency || currency)}</span>
+                      <span>{formatMoney(tier.childPriceCents ?? Math.round(tier.adultPriceCents * 0.73), tier.currency || currency)}</span>
+                      <span>{Number(tier.childDiscountPercent ?? 27)}%</span>
+                      <div className="flex gap-1">
+                        <IconButton
+                          disabled={disabled}
+                          label="Edit pricing tier"
+                          onClick={() =>
+                            setTierModal({
+                              adultPrice: centsToMajor(tier.adultPriceCents, currency),
+                              childDiscountPercent: String(tier.childDiscountPercent ?? 27),
+                              childPrice: tier.childPriceCents == null ? "" : centsToMajor(tier.childPriceCents, currency),
+                              index,
+                              isActive: tier.isActive,
+                              maxTravelers: String(tier.maxTravelers),
+                              minTravelers: String(tier.minTravelers)
+                            })
+                          }
+                        >
+                          <Pencil className="size-4" />
+                        </IconButton>
+                        <IconButton disabled={disabled} label="Delete pricing tier" onClick={() => setTiers((current) => removeAt(current, index))}>
+                          <Trash2 className="size-4" />
+                        </IconButton>
+                      </div>
+                    </div>
+                  ))
+                ) : (
+                  <p className="border-t border-[#2B2B2B]/10 px-4 py-6 text-center text-sm text-travel-muted">
+                    Add tiers for 1, 2, 3, 4, and a larger group range.
+                  </p>
+                )}
+              </div>
+            </div>
+          )}
+
           <div className="flex flex-wrap items-center gap-3">
-            <ButtonCTA disabled={disabled || isSaving} type="submit" variant="outline">
-              Save price
+            <ButtonCTA disabled={disabled || isSaving || (pricingMode === "GROUP_TIER" && tiers.length === 0)} type="submit" variant="outline">
+              Save pricing
             </ButtonCTA>
-            <span className="text-sm text-travel-muted">
-              Current price: {previewCents ? formatMoney(previewCents, currency) : "No price"} {formatPriceType(priceType)}
-            </span>
+            {pricingMode === "SIMPLE" ? (
+              <span className="text-sm text-travel-muted">
+                Current price: {previewCents ? formatMoney(previewCents, currency) : "No price"} {formatPriceType(priceType)}
+              </span>
+            ) : null}
           </div>
           {error ? <p className="text-sm font-medium text-red-700">{error}</p> : null}
         </form>
       </CardContent>
+      <Dialog
+        description="Prices are per traveler and stored in minor units after saving."
+        onClose={() => setTierModal(null)}
+        open={Boolean(tierModal)}
+        title={tierModal?.index === undefined ? "Add pricing tier" : "Edit pricing tier"}
+      >
+        {tierModal ? (
+          <form
+            className="grid gap-4"
+            onSubmit={(event) => {
+              event.preventDefault();
+              const discount = Number(tierModal.childDiscountPercent || 27);
+              const adultPriceCents = parseMoneyToCents(tierModal.adultPrice, currency);
+              const childPriceCents = tierModal.childPrice
+                ? parseMoneyToCents(tierModal.childPrice, currency)
+                : Math.round(adultPriceCents * (1 - discount / 100));
+              const next = {
+                activityId: activity.id,
+                adultPriceCents,
+                childDiscountPercent: discount,
+                childPriceCents,
+                createdAt: "",
+                currency,
+                id: tierModal.index === undefined ? `draft-${Date.now()}` : tiers[tierModal.index].id,
+                isActive: tierModal.isActive,
+                maxTravelers: Number(tierModal.maxTravelers),
+                minTravelers: Number(tierModal.minTravelers),
+                priceType,
+                updatedAt: ""
+              };
+              setTiers((current) =>
+                tierModal.index === undefined
+                  ? [...current, next].sort((a, b) => a.minTravelers - b.minTravelers)
+                  : replaceAt(current, tierModal.index, next).sort((a, b) => a.minTravelers - b.minTravelers)
+              );
+              setTierModal(null);
+            }}
+          >
+            <div className="grid gap-4 sm:grid-cols-2">
+              <Field label="Min travelers" required>
+                <Input max={14} min={1} onChange={(event) => setTierModal({ ...tierModal, minTravelers: event.target.value })} required type="number" value={tierModal.minTravelers} />
+              </Field>
+              <Field label="Max travelers" required>
+                <Input max={14} min={1} onChange={(event) => setTierModal({ ...tierModal, maxTravelers: event.target.value })} required type="number" value={tierModal.maxTravelers} />
+              </Field>
+              <Field label={`Adult price (${currency})`} required>
+                <Input min={0} onChange={(event) => setTierModal({ ...tierModal, adultPrice: event.target.value })} required step="0.01" type="number" value={tierModal.adultPrice} />
+              </Field>
+              <Field label={`Child price (${currency})`} hint="Leave empty to derive it from the discount.">
+                <Input min={0} onChange={(event) => setTierModal({ ...tierModal, childPrice: event.target.value })} step="0.01" type="number" value={tierModal.childPrice} />
+              </Field>
+              <Field label="Child discount percent">
+                <Input max={100} min={0} onChange={(event) => setTierModal({ ...tierModal, childDiscountPercent: event.target.value })} type="number" value={tierModal.childDiscountPercent} />
+              </Field>
+            </div>
+            <label className="flex items-center gap-2 text-sm font-medium text-travel-dark">
+              <input checked={tierModal.isActive} onChange={(event) => setTierModal({ ...tierModal, isActive: event.target.checked })} type="checkbox" />
+              Active tier
+            </label>
+            <DialogActions onCancel={() => setTierModal(null)} submitLabel="Save tier" />
+          </form>
+        ) : null}
+      </Dialog>
     </Card>
   );
 }

@@ -100,6 +100,17 @@ export class PartnerActivitiesController {
     };
   }
 
+  @Get("activities/:id/pricing")
+  async getPricing(
+    @CurrentUser() user: AuthenticatedRequestUser,
+    @Param("id") id: string
+  ) {
+    return {
+      success: true,
+      data: await this.activities.getPricing(user.id, id)
+    };
+  }
+
   @Put("activities/:id/pricing")
   async pricing(
     @CurrentUser() user: AuthenticatedRequestUser,

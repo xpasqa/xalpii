@@ -1,5 +1,6 @@
 import { apiFetch } from "./api";
 import type { TravelActivity, TravelCity } from "../data/mock-travel";
+import type { ActivityPricingTier, PricingMode } from "./activity-pricing";
 
 const placeholderImage =
   "https://images.unsplash.com/photo-1500534314209-a25ddb2bd429?auto=format&fit=crop&w=1200&q=85";
@@ -40,6 +41,8 @@ type PublicActivityAvailability = {
   startDateTime: string;
   endDateTime?: string | null;
   capacity?: number | null;
+  bookedCount: number;
+  isActive: boolean;
 };
 
 export type PublicActivity = {
@@ -58,6 +61,9 @@ export type PublicActivity = {
   itinerary?: unknown;
   ratingAverage: string | number;
   reviewCount: number;
+  pricingMode?: PricingMode;
+  pricingTiers?: ActivityPricingTier[];
+  fromPriceCents?: number | null;
   city: PublicCity;
   category: {
     id: string;
@@ -137,8 +143,11 @@ export function mapPublicActivity(activity: PublicActivity): TravelActivity {
     duration: activity.durationLabel ?? "Duration varies",
     rating: Number(activity.ratingAverage || 0),
     reviewCount: activity.reviewCount ?? 0,
-    price: pricing?.priceCents ?? 0,
+    price: activity.fromPriceCents ?? pricing?.priceCents ?? 0,
     currency: pricing?.currency ?? "IDR",
+    pricingMode: activity.pricingMode ?? "SIMPLE",
+    pricingTiers: activity.pricingTiers ?? [],
+    availability: activity.availability ?? [],
     badge: activity.reviewCount > 100 ? "Top rated" : undefined,
     badgeLabel: activity.reviewCount > 100 ? "Popular choice" : "Curated by Alpii",
     providerName: activity.partner?.businessName ?? "Curated by Alpii",

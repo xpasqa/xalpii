@@ -1,4 +1,5 @@
 import type { CurrencyCode } from "../types/common";
+import type { ActivityPricingTier, PricingMode } from "../lib/activity-pricing";
 
 export type TravelCity = {
   slug: string;
@@ -28,6 +29,16 @@ export type TravelActivity = {
   reviewCount: number;
   price: number;
   currency: CurrencyCode;
+  pricingMode?: PricingMode;
+  pricingTiers?: ActivityPricingTier[];
+  availability?: Array<{
+    id: string;
+    startDateTime: string;
+    endDateTime?: string | null;
+    capacity?: number | null;
+    bookedCount: number;
+    isActive: boolean;
+  }>;
   badge?: string;
   badgeLabel?: string;
   providerName?: string;

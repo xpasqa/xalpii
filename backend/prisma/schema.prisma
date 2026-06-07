@@ -79,6 +79,16 @@ enum PayoutStatus {
   CANCELLED
 }
 
+enum PricingMode {
+  SIMPLE
+  GROUP_TIER
+}
+
+enum ParticipantType {
+  ADULT
+  CHILD
+}
+
 model User {
   id           String     @id @default(uuid()) @db.Uuid
   email        String     @unique
@@ -163,6 +173,7 @@ model Activity {
   shortDescription   String         @map("short_description")
   description        String
   status             ActivityStatus @default(DRAFT)
+  pricingMode        PricingMode    @default(SIMPLE) @map("pricing_mode")
   durationLabel      String?        @map("duration_label")
   meetingPoint       String?        @map("meeting_point")
   cancellationPolicy String?        @map("cancellation_policy")
@@ -182,6 +193,7 @@ model Activity {
   category      Category               @relation(fields: [categoryId], references: [id], onDelete: Restrict)
   media         ActivityMedia[]
   pricing       ActivityPricing[]
+  pricingTiers  ActivityPricingTier[]
   availability  ActivityAvailability[]
   bookings      Booking[]
   reviews       Review[]
@@ -223,6 +235,27 @@ model ActivityPricing {
 
   @@index([activityId, isActive])
   @@map("activity_pricing")
+}
+
+model ActivityPricingTier {
+  id                   String   @id @default(uuid()) @db.Uuid
+  activityId           String   @map("activity_id") @db.Uuid
+  currency             String
+  minTravelers         Int      @map("min_travelers")
+  maxTravelers         Int      @map("max_travelers")
+  adultPriceCents      Int      @map("adult_price_cents")
+  childPriceCents      Int?     @map("child_price_cents")
+  childDiscountPercent Decimal? @default(27) @map("child_discount_percent") @db.Decimal(5, 2)
+  priceType            String   @default("per_person") @map("price_type")
+  isActive             Boolean  @default(true) @map("is_active")
+  createdAt            DateTime @default(now()) @map("created_at")
+  updatedAt            DateTime @updatedAt @map("updated_at")
+
+  activity Activity @relation(fields: [activityId], references: [id], onDelete: Cascade)
+
+  @@index([activityId, isActive])
+  @@index([activityId, minTravelers, maxTravelers])
+  @@map("activity_pricing_tiers")
 }
 
 model ActivityAvailability {
@@ -292,12 +325,13 @@ model Booking {
 }
 
 model BookingParticipant {
-  id         String   @id @default(uuid()) @db.Uuid
-  bookingId  String   @map("booking_id") @db.Uuid
-  label      String
-  quantity   Int
-  priceCents Int      @map("price_cents")
-  createdAt  DateTime @default(now()) @map("created_at")
+  id              String          @id @default(uuid()) @db.Uuid
+  bookingId       String          @map("booking_id") @db.Uuid
+  participantType ParticipantType @default(ADULT) @map("participant_type")
+  label           String
+  quantity        Int
+  priceCents      Int             @map("price_cents")
+  createdAt       DateTime        @default(now()) @map("created_at")
 
   booking Booking @relation(fields: [bookingId], references: [id], onDelete: Cascade)
 

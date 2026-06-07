@@ -6,12 +6,15 @@ import {
   IsDateString,
   IsEnum,
   IsInt,
+  IsNumber,
   IsOptional,
   IsString,
+  Max,
   MaxLength,
-  Min
+  Min,
+  ValidateNested
 } from "class-validator";
-import { ActivityStatus } from "@prisma/client";
+import { ActivityStatus, PricingMode } from "@prisma/client";
 
 export class PartnerActivityQueryDto {
   @IsOptional()
@@ -148,23 +151,71 @@ export class UpdatePartnerActivityDto {
   itinerary?: unknown;
 }
 
-export class UpsertPartnerActivityPricingDto {
-  @IsString()
-  @MaxLength(3)
-  currency!: string;
+export class ActivityPricingTierDto {
+  @Type(() => Number)
+  @IsInt()
+  @Min(1)
+  @Max(14)
+  minTravelers!: number;
 
   @Type(() => Number)
   @IsInt()
-  @Min(0)
-  priceCents!: number;
+  @Min(1)
+  @Max(14)
+  maxTravelers!: number;
 
-  @IsString()
-  @MaxLength(80)
-  priceType!: string;
+  @Type(() => Number)
+  @IsInt()
+  @Min(1)
+  adultPriceCents!: number;
+
+  @IsOptional()
+  @Type(() => Number)
+  @IsInt()
+  @Min(0)
+  childPriceCents?: number;
+
+  @IsOptional()
+  @Type(() => Number)
+  @IsNumber()
+  @Min(0)
+  @Max(100)
+  childDiscountPercent?: number;
 
   @IsOptional()
   @IsBoolean()
   isActive?: boolean;
+}
+
+export class UpsertPartnerActivityPricingDto {
+  @IsOptional()
+  @IsEnum(PricingMode)
+  pricingMode?: PricingMode;
+
+  @IsString()
+  @MaxLength(3)
+  currency!: string;
+
+  @IsOptional()
+  @Type(() => Number)
+  @IsInt()
+  @Min(1)
+  priceCents?: number;
+
+  @IsOptional()
+  @IsString()
+  @MaxLength(80)
+  priceType?: string;
+
+  @IsOptional()
+  @IsBoolean()
+  isActive?: boolean;
+
+  @IsOptional()
+  @IsArray()
+  @ValidateNested({ each: true })
+  @Type(() => ActivityPricingTierDto)
+  tiers?: ActivityPricingTierDto[];
 }
 
 export class CreatePartnerActivityAvailabilityDto {

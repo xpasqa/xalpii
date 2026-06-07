@@ -1,6 +1,7 @@
 import {
   ActivityStatus,
   PartnerStatus,
+  PricingMode,
   Prisma,
   PrismaClient,
   UserRole,
@@ -495,7 +496,8 @@ async function main() {
         itinerary: activity.itinerary as Prisma.InputJsonValue,
         ratingAverage: new Prisma.Decimal(activity.ratingAverage),
         reviewCount: activity.reviewCount,
-        publishedAt: new Date()
+        publishedAt: new Date(),
+        pricingMode: PricingMode.GROUP_TIER
       },
       create: {
         partnerId: partner.id,
@@ -516,11 +518,13 @@ async function main() {
         itinerary: activity.itinerary as Prisma.InputJsonValue,
         ratingAverage: new Prisma.Decimal(activity.ratingAverage),
         reviewCount: activity.reviewCount,
-        publishedAt: new Date()
+        publishedAt: new Date(),
+        pricingMode: PricingMode.GROUP_TIER
       }
     });
 
     await prisma.activityPricing.deleteMany({ where: { activityId: savedActivity.id } });
+    await prisma.activityPricingTier.deleteMany({ where: { activityId: savedActivity.id } });
     await prisma.activityMedia.deleteMany({ where: { activityId: savedActivity.id } });
     await prisma.activityAvailability.deleteMany({ where: { activityId: savedActivity.id } });
 
@@ -532,6 +536,16 @@ async function main() {
         priceType: "per_person",
         isActive: true
       }
+    });
+
+    await prisma.activityPricingTier.createMany({
+      data: buildPricingTiers(activity.priceCents).map((tier) => ({
+        activityId: savedActivity.id,
+        currency: activity.currency,
+        priceType: "per_person",
+        isActive: true,
+        ...tier
+      }))
     });
 
     await prisma.activityMedia.create({
@@ -573,6 +587,26 @@ async function main() {
         activities: activities.length
       }
     }
+  });
+}
+
+function buildPricingTiers(baseAdultPriceCents: number) {
+  const ranges = [
+    { minTravelers: 1, maxTravelers: 1, multiplier: 1 },
+    { minTravelers: 2, maxTravelers: 2, multiplier: 0.75 },
+    { minTravelers: 3, maxTravelers: 3, multiplier: 0.65 },
+    { minTravelers: 4, maxTravelers: 4, multiplier: 0.6 },
+    { minTravelers: 5, maxTravelers: 12, multiplier: 0.525 }
+  ];
+
+  return ranges.map(({ multiplier, ...range }) => {
+    const adultPriceCents = Math.max(1, Math.round(baseAdultPriceCents * multiplier));
+    return {
+      ...range,
+      adultPriceCents,
+      childPriceCents: Math.round(adultPriceCents * 0.73),
+      childDiscountPercent: new Prisma.Decimal(27)
+    };
   });
 }
 

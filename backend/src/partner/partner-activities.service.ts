@@ -5,7 +5,7 @@ import {
   Injectable,
   NotFoundException
 } from "@nestjs/common";
-import { ActivityStatus, Prisma } from "@prisma/client";
+import { ActivityStatus, PricingMode, Prisma } from "@prisma/client";
 import { PrismaService } from "../prisma.service";
 import type {
   CreatePartnerActivityAvailabilityDto,
@@ -38,6 +38,9 @@ const activityDetailInclude = {
     orderBy: {
       createdAt: "desc"
     }
+  },
+  pricingTiers: {
+    orderBy: [{ minTravelers: "asc" }, { maxTravelers: "asc" }]
   }
 } satisfies Prisma.ActivityInclude;
 
@@ -77,6 +80,10 @@ export class PartnerActivitiesService {
           where: { isActive: true },
           orderBy: { createdAt: "desc" },
           take: 1
+        },
+        pricingTiers: {
+          where: { isActive: true },
+          orderBy: [{ minTravelers: "asc" }, { maxTravelers: "asc" }]
         }
       },
       orderBy: {
@@ -190,30 +197,79 @@ export class PartnerActivitiesService {
     const activity = await this.getOwnedActivity(partner.id, activityId);
     this.assertEditable(activity.status);
 
+    const pricingMode = dto.pricingMode ?? PricingMode.SIMPLE;
+    const currency = dto.currency.trim().toUpperCase();
+    const priceType = dto.priceType?.trim() || "per_person";
     const isActive = dto.isActive ?? true;
+    const tiers =
+      pricingMode === PricingMode.GROUP_TIER
+        ? normalizePricingTiers(dto.tiers ?? [], currency, priceType)
+        : [];
+
+    if (pricingMode === PricingMode.SIMPLE && !dto.priceCents) {
+      throw new BadRequestException({
+        code: "ACTIVITY_SIMPLE_PRICE_REQUIRED",
+        message: "A positive simple price is required"
+      });
+    }
+
+    const summaryPrice =
+      pricingMode === PricingMode.GROUP_TIER
+        ? Math.min(...tiers.filter((tier) => tier.isActive).map((tier) => tier.adultPriceCents))
+        : dto.priceCents!;
+
     const pricing = await this.prisma.$transaction(async (tx) => {
-      if (isActive) {
-        await tx.activityPricing.updateMany({
-          where: { activityId: activity.id },
-          data: { isActive: false }
+      await tx.activity.update({
+        where: { id: activity.id },
+        data: { pricingMode }
+      });
+      await tx.activityPricing.updateMany({
+        where: { activityId: activity.id },
+        data: { isActive: false }
+      });
+      await tx.activityPricingTier.deleteMany({
+        where: { activityId: activity.id }
+      });
+
+      const summary = await tx.activityPricing.create({
+        data: {
+          activityId: activity.id,
+          currency,
+          isActive,
+          priceCents: summaryPrice,
+          priceType
+        }
+      });
+
+      if (tiers.length) {
+        await tx.activityPricingTier.createMany({
+          data: tiers.map((tier) => ({
+            ...tier,
+            activityId: activity.id
+          }))
         });
       }
 
-      return tx.activityPricing.create({
-        data: {
-          activityId: activity.id,
-          currency: dto.currency.trim().toUpperCase(),
-          isActive,
-          priceCents: dto.priceCents,
-          priceType: dto.priceType.trim()
-        }
-      });
+      return summary;
     });
 
     await this.audit(userId, "ACTIVITY_PRICING_UPDATED", activity.id, {
-      pricingId: pricing.id
+      pricingId: pricing.id,
+      pricingMode,
+      tierCount: tiers.length
     });
-    return pricing;
+    return this.getPricing(userId, activity.id);
+  }
+
+  async getPricing(userId: string, activityId: string) {
+    const partner = await this.getPartnerForUser(userId);
+    const activity = await this.getOwnedActivity(partner.id, activityId);
+
+    return {
+      pricingMode: activity.pricingMode,
+      pricing: activity.pricing,
+      pricingTiers: activity.pricingTiers
+    };
   }
 
   async listAvailability(userId: string, activityId: string) {
@@ -472,7 +528,10 @@ export class PartnerActivitiesService {
   }
 
   private assertSubmittable(activity: Awaited<ReturnType<typeof this.getOwnedActivity>>) {
-    const hasPricing = activity.pricing.some((price) => price.isActive);
+    const hasPricing =
+      activity.pricing.some((price) => price.isActive) &&
+      (activity.pricingMode !== PricingMode.GROUP_TIER ||
+        activity.pricingTiers.some((tier) => tier.isActive));
     const missing: string[] = [];
 
     if (!activity.title.trim()) missing.push("title");
@@ -578,6 +637,64 @@ function normalizeJson(value: unknown) {
   }
 
   return value as Prisma.InputJsonValue;
+}
+
+function normalizePricingTiers(
+  tiers: NonNullable<UpsertPartnerActivityPricingDto["tiers"]>,
+  currency: string,
+  priceType: string
+) {
+  if (!tiers.length) {
+    throw new BadRequestException({
+      code: "ACTIVITY_PRICING_TIERS_REQUIRED",
+      message: "Group tier pricing requires at least one pricing tier"
+    });
+  }
+
+  const normalized = tiers
+    .map((tier) => {
+      const discount = tier.childDiscountPercent ?? 27;
+      return {
+        adultPriceCents: tier.adultPriceCents,
+        childDiscountPercent: new Prisma.Decimal(discount),
+        childPriceCents:
+          tier.childPriceCents ?? Math.round(tier.adultPriceCents * (1 - discount / 100)),
+        currency,
+        isActive: tier.isActive ?? true,
+        maxTravelers: tier.maxTravelers,
+        minTravelers: tier.minTravelers,
+        priceType
+      };
+    })
+    .sort((a, b) => a.minTravelers - b.minTravelers);
+
+  const active = normalized.filter((tier) => tier.isActive);
+  if (!active.length) {
+    throw new BadRequestException({
+      code: "ACTIVITY_ACTIVE_PRICING_TIER_REQUIRED",
+      message: "At least one pricing tier must be active"
+    });
+  }
+
+  for (let index = 0; index < active.length; index += 1) {
+    const tier = active[index];
+    if (tier.maxTravelers < tier.minTravelers) {
+      throw new BadRequestException({
+        code: "ACTIVITY_PRICING_TIER_RANGE_INVALID",
+        message: "Tier maximum travelers must be greater than or equal to its minimum"
+      });
+    }
+
+    const previous = active[index - 1];
+    if (previous && tier.minTravelers <= previous.maxTravelers) {
+      throw new BadRequestException({
+        code: "ACTIVITY_PRICING_TIERS_OVERLAP",
+        message: "Active pricing tier traveler ranges cannot overlap"
+      });
+    }
+  }
+
+  return normalized;
 }
 
 function slugify(value: string) {

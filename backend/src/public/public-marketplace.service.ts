@@ -21,6 +21,10 @@ const publicActivityListInclude = {
     where: { isActive: true },
     orderBy: { createdAt: "desc" },
     take: 1
+  },
+  pricingTiers: {
+    where: { isActive: true },
+    orderBy: [{ minTravelers: "asc" }, { maxTravelers: "asc" }]
   }
 } satisfies Prisma.ActivityInclude;
 
@@ -48,6 +52,10 @@ const publicActivityDetailInclude = {
     where: { isActive: true },
     orderBy: { createdAt: "desc" },
     take: 1
+  },
+  pricingTiers: {
+    where: { isActive: true },
+    orderBy: [{ minTravelers: "asc" }, { maxTravelers: "asc" }]
   }
 } satisfies Prisma.ActivityInclude;
 
@@ -111,12 +119,14 @@ export class PublicMarketplaceService {
       ];
     }
 
-    return this.prisma.activity.findMany({
+    const activities = await this.prisma.activity.findMany({
       where,
       include: publicActivityListInclude,
       orderBy: [{ publishedAt: "desc" }, { updatedAt: "desc" }],
       take: limit
     });
+
+    return activities.map(withPublicPricingSummary);
   }
 
   async getActivity(slug: string) {
@@ -135,7 +145,7 @@ export class PublicMarketplaceService {
       });
     }
 
-    return activity;
+    return withPublicPricingSummary(activity);
   }
 
   async home() {
@@ -161,6 +171,25 @@ export class PublicMarketplaceService {
 
     return new Map(rows.map((row) => [row.cityId, row._count._all]));
   }
+}
+
+function withPublicPricingSummary<
+  TActivity extends {
+    pricing: Array<{ priceCents: number }>;
+    pricingTiers: Array<{ adultPriceCents: number; isActive: boolean }>;
+  }
+>(activity: TActivity) {
+  const tierPrices = activity.pricingTiers
+    .filter((tier) => tier.isActive)
+    .map((tier) => tier.adultPriceCents);
+
+  return {
+    ...activity,
+    fromPriceCents:
+      tierPrices.length > 0
+        ? Math.min(...tierPrices)
+        : activity.pricing[0]?.priceCents ?? null
+  };
 }
 
 function clampLimit(value?: string) {

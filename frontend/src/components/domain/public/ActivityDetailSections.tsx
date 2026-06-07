@@ -1,4 +1,7 @@
+"use client";
+
 import type { ReactNode } from "react";
+import { useMemo, useState } from "react";
 import {
   CalendarDays,
   Check,
@@ -18,6 +21,11 @@ import {
 } from "lucide-react";
 import type { TravelActivity } from "../../../data/mock-travel";
 import { formatMoney } from "../../../lib/money";
+import {
+  calculatePricingEstimate,
+  remainingCapacity,
+  travelerSummary
+} from "../../../lib/activity-pricing";
 import { routes } from "../../../lib/routes";
 import { ButtonCTA, Card, CardContent, CardHeader, CardTitle } from "../../ui";
 
@@ -111,6 +119,31 @@ export function ActivityDetailGallery({ activity }: DetailSectionProps) {
 }
 
 export function ActivityBookingBox({ activity }: DetailSectionProps) {
+  const availability = activity.availability ?? [];
+  const [availabilityId, setAvailabilityId] = useState(availability[0]?.id ?? "");
+  const [adults, setAdults] = useState(1);
+  const [children, setChildren] = useState(0);
+  const [openPanel, setOpenPanel] = useState<"date" | "travelers" | null>(null);
+  const selectedAvailability =
+    availability.find((item) => item.id === availabilityId) ?? availability[0];
+  const maxTravelers = remainingCapacity(selectedAvailability);
+  const estimate = useMemo(
+    () =>
+      calculatePricingEstimate({
+        adults,
+        children,
+        pricingMode: activity.pricingMode,
+        pricingTiers: activity.pricingTiers,
+        simplePrice: { currency: activity.currency, priceCents: activity.price }
+      }),
+    [activity.currency, activity.price, activity.pricingMode, activity.pricingTiers, adults, children]
+  );
+  const checkoutHref = `${routes.checkout(activity.slug)}?${new URLSearchParams({
+    adults: String(adults),
+    children: String(children),
+    ...(selectedAvailability ? { availabilityId: selectedAvailability.id } : {})
+  }).toString()}`;
+
   return (
     <div className="space-y-4">
       <Card className={`${containerOutlineClass} shadow-[0_14px_32px_rgba(26,26,26,0.08)]`}>
@@ -123,20 +156,118 @@ export function ActivityBookingBox({ activity }: DetailSectionProps) {
             <span className="ml-2 text-xs font-normal text-travel-muted">per person</span>
           </div>
 
-          <div className={`grid overflow-hidden rounded-travel-lg border ${containerOutlineClass} md:grid-cols-2`}>
-            <BookingSplitSelector
-              label="Date"
-              value="Sun, Jun 7"
-            />
-            <BookingSplitSelector
-              className={`border-t ${containerOutlineClass} md:border-l md:border-t-0`}
-              label="Travelers"
-              value="2"
-            />
+          <div className={`relative grid rounded-travel-lg border ${containerOutlineClass} md:grid-cols-2`}>
+            <button
+              className="flex min-h-[58px] items-center justify-between px-3 py-2.5 text-left transition hover:bg-travel-bg"
+              onClick={() => setOpenPanel(openPanel === "date" ? null : "date")}
+              type="button"
+            >
+              <span>
+                <span className="block text-[11px] font-medium text-travel-muted">Date</span>
+                <span className="mt-0.5 block text-sm font-medium text-travel-dark">
+                  {selectedAvailability
+                    ? formatSessionDate(selectedAvailability.startDateTime)
+                    : "No sessions available"}
+                </span>
+              </span>
+              <ChevronDown className="size-3.5 text-travel-muted" />
+            </button>
+            <button
+              className={`flex min-h-[58px] items-center justify-between border-t px-3 py-2.5 text-left transition hover:bg-travel-bg ${containerOutlineClass} md:border-l md:border-t-0`}
+              onClick={() => setOpenPanel(openPanel === "travelers" ? null : "travelers")}
+              type="button"
+            >
+              <span>
+                <span className="block text-[11px] font-medium text-travel-muted">Travelers</span>
+                <span className="mt-0.5 block text-sm font-medium text-travel-dark">
+                  {travelerSummary(adults, children)}
+                </span>
+              </span>
+              <ChevronDown className="size-3.5 text-travel-muted" />
+            </button>
+
+            {openPanel === "date" ? (
+              <div className="absolute left-0 right-0 top-[calc(100%+8px)] z-40 rounded-travel-lg border border-[#2B2B2B]/20 bg-white p-3 shadow-[0_16px_36px_rgba(26,26,26,0.14)]">
+                <p className="mb-2 font-interface text-xs font-semibold text-travel-muted">Available sessions</p>
+                {availability.length ? (
+                  <div className="grid max-h-56 gap-1 overflow-y-auto">
+                    {availability.map((slot) => {
+                      const remaining = remainingCapacity(slot);
+                      return (
+                        <button
+                          className={`rounded-travel-md px-3 py-2.5 text-left text-sm transition ${
+                            slot.id === selectedAvailability?.id
+                              ? "bg-[#FBEAE8] text-travel-primary"
+                              : "hover:bg-travel-bg"
+                          }`}
+                          key={slot.id}
+                          onClick={() => {
+                            setAvailabilityId(slot.id);
+                            if (adults + children > remaining) {
+                              setChildren(0);
+                              setAdults(Math.max(1, remaining));
+                            }
+                            setOpenPanel(null);
+                          }}
+                          type="button"
+                        >
+                          <span className="block font-medium">{formatSessionDate(slot.startDateTime)}</span>
+                          <span className="mt-0.5 block text-xs text-travel-muted">{remaining} spots left</span>
+                        </button>
+                      );
+                    })}
+                  </div>
+                ) : (
+                  <p className="text-sm text-travel-muted">No active sessions are currently available.</p>
+                )}
+              </div>
+            ) : null}
+
+            {openPanel === "travelers" ? (
+              <div className="absolute left-0 right-0 top-[calc(100%+8px)] z-40 rounded-travel-lg border border-[#2B2B2B]/20 bg-white p-4 shadow-[0_16px_36px_rgba(26,26,26,0.14)]">
+                <TravelerStepper
+                  description="Age 14-105"
+                  label="Adult"
+                  max={Math.max(1, maxTravelers - children)}
+                  min={1}
+                  onChange={setAdults}
+                  value={adults}
+                />
+                <div className="my-3 border-t border-[#2B2B2B]/10" />
+                <TravelerStepper
+                  badge={
+                    activity.pricingTiers?.length
+                      ? `-${Number(activity.pricingTiers[0]?.childDiscountPercent ?? 27)}%`
+                      : undefined
+                  }
+                  description="Age 4-13"
+                  label="Child"
+                  max={Math.max(0, maxTravelers - adults)}
+                  min={0}
+                  onChange={setChildren}
+                  value={children}
+                />
+                <ButtonCTA className="mt-4" fullWidth onClick={() => setOpenPanel(null)} size="sm" type="button">
+                  Apply
+                </ButtonCTA>
+              </div>
+            ) : null}
           </div>
 
-          <ButtonCTA fullWidth href={routes.checkout(activity.slug)} size="lg">
-            Check availability
+          {estimate ? (
+            <div className="space-y-2 border-t border-[#2B2B2B]/10 pt-3 text-sm">
+              <PriceLine label={`Adult x ${adults}`} value={formatMoney(estimate.adultLineTotalCents, estimate.currency)} />
+              {children > 0 ? (
+                <PriceLine label={`Child x ${children}`} value={formatMoney(estimate.childLineTotalCents, estimate.currency)} />
+              ) : null}
+              <PriceLine label="Estimated total" strong value={formatMoney(estimate.totalAmountCents, estimate.currency)} />
+            </div>
+          ) : (
+            <p className="text-sm text-red-700">No pricing tier covers this group size.</p>
+          )}
+
+          <ButtonCTA disabled={!estimate || availability.length === 0} fullWidth href={checkoutHref} size="lg">
+            Book now
           </ButtonCTA>
 
           <div className="space-y-4 rounded-travel-lg bg-[#F3FAF7] p-4">
@@ -169,6 +300,73 @@ export function ActivityBookingBox({ activity }: DetailSectionProps) {
       </Card>
     </div>
   );
+}
+
+function TravelerStepper({
+  badge,
+  description,
+  label,
+  max,
+  min,
+  onChange,
+  value
+}: {
+  badge?: string;
+  description: string;
+  label: string;
+  max: number;
+  min: number;
+  onChange: (value: number) => void;
+  value: number;
+}) {
+  return (
+    <div className="flex items-center justify-between gap-4">
+      <div>
+        <div className="flex items-center gap-2">
+          <p className="text-sm font-semibold text-travel-dark">{label}</p>
+          {badge ? <span className="rounded-full bg-[#FBEAE8] px-2 py-0.5 text-[11px] font-semibold text-travel-primary">{badge}</span> : null}
+        </div>
+        <p className="mt-0.5 text-xs text-travel-muted">{description}</p>
+      </div>
+      <div className="flex items-center gap-3">
+        <button
+          aria-label={`Decrease ${label}`}
+          className="flex size-8 items-center justify-center rounded-full border border-[#2B2B2B]/20 text-lg disabled:opacity-35"
+          disabled={value <= min}
+          onClick={() => onChange(Math.max(min, value - 1))}
+          type="button"
+        >
+          -
+        </button>
+        <span className="w-5 text-center text-sm font-semibold">{value}</span>
+        <button
+          aria-label={`Increase ${label}`}
+          className="flex size-8 items-center justify-center rounded-full border border-[#2B2B2B]/20 text-lg disabled:opacity-35"
+          disabled={value >= max}
+          onClick={() => onChange(Math.min(max, value + 1))}
+          type="button"
+        >
+          +
+        </button>
+      </div>
+    </div>
+  );
+}
+
+function PriceLine({ label, value, strong = false }: { label: string; value: string; strong?: boolean }) {
+  return (
+    <div className={`flex items-center justify-between gap-4 ${strong ? "font-semibold text-travel-dark" : "text-travel-muted"}`}>
+      <span>{label}</span>
+      <span>{value}</span>
+    </div>
+  );
+}
+
+function formatSessionDate(value: string) {
+  return new Intl.DateTimeFormat("en-US", {
+    dateStyle: "medium",
+    timeStyle: "short"
+  }).format(new Date(value));
 }
 
 export function AboutActivitySection({ activity }: DetailSectionProps) {
