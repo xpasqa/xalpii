@@ -19,7 +19,7 @@ Initial Sprint 0 foundation for Alpii.
 | Frontend | http://localhost:3000 |
 | Backend | http://localhost:4000 |
 | Backend health | http://localhost:4000/health |
-| PostgreSQL | localhost:5432 |
+| PostgreSQL | localhost:5433 in hybrid mode, localhost:5432 inside Docker |
 | Redis | localhost:6379 |
 | MinIO API | http://localhost:9000 |
 | MinIO console | http://localhost:9001 |
@@ -47,6 +47,8 @@ Use this mode when infrastructure runs in Docker but the backend runs manually o
    cd backend
    npm install
    npm run prisma:generate
+   npm run prisma:migrate -- --name sprint3_data_foundation
+   npm run prisma:seed
    npm run start:dev
    ```
 
@@ -66,7 +68,97 @@ Expected response:
 }
 ```
 
-For hybrid mode, `DATABASE_URL` must use `localhost`, not `postgres`.
+For hybrid mode, `DATABASE_URL` must use `localhost`, not `postgres`. The current hybrid template uses:
+
+```txt
+DATABASE_URL=postgresql://alpii:alpii_password@localhost:5433/alpii?schema=public
+```
+
+## Backend Database Commands
+
+Run these from `backend/` after Docker infra is running:
+
+```bash
+npm run prisma:generate
+npm run prisma:migrate -- --name sprint3_data_foundation
+npm run prisma:seed
+```
+
+Useful optional commands:
+
+```bash
+npm run prisma:studio
+npm run db:reset
+```
+
+The Sprint 3 seed creates:
+
+- `admin@alpii.local` with role `SUPER_ADMIN`
+- `partner@alpii.local` with role `PARTNER`
+- `user@alpii.local` with role `USER`
+- one approved demo partner profile
+- 6 cities
+- 6 categories
+- 8 published demo activities with pricing, media, availability, and marketplace content
+
+Sprint 4 replaces the original placeholder password hashes with bcrypt hashes for the demo credentials below.
+
+## Sprint 4 Auth Foundation
+
+Seeded demo credentials:
+
+```txt
+admin@alpii.local / Password123!
+partner@alpii.local / Password123!
+user@alpii.local / Password123!
+```
+
+Backend auth endpoints:
+
+```txt
+POST /auth/register
+POST /auth/register-partner
+POST /auth/login
+GET /auth/me
+POST /auth/logout
+```
+
+Run backend locally:
+
+```bash
+cd backend
+npm run prisma:generate
+npm run prisma:seed
+npm run start:dev
+```
+
+Example login test:
+
+```bash
+curl -X POST http://localhost:4000/auth/login \
+  -H "Content-Type: application/json" \
+  -d '{"email":"admin@alpii.local","password":"Password123!"}'
+```
+
+Use the returned token for `/auth/me`:
+
+```bash
+curl http://localhost:4000/auth/me \
+  -H "Authorization: Bearer <access-token>"
+```
+
+Frontend auth routes:
+
+```txt
+http://localhost:3000/login
+http://localhost:3000/register
+http://localhost:3000/register/partner
+http://localhost:3000/dashboard
+http://localhost:3000/dashboard/partner
+http://localhost:3000/dashboard/admin
+```
+
+Sprint 4 only adds authentication and route protection foundations. Admin CRUD, partner activity submission, booking, and payment flows are intentionally not implemented yet.
 
 ## Full Docker Development
 
@@ -78,6 +170,34 @@ docker compose --env-file .env up --build
 ```
 
 In full Docker mode, `DATABASE_URL` must use the Compose service host `postgres`.
+
+## Database Connection Troubleshooting
+
+The local hybrid setup expects Docker PostgreSQL to be reachable from the host on `localhost:5433`. Docker still maps that host port to PostgreSQL's container port `5432`.
+
+Use this backend connection string in `backend/.env`:
+
+```txt
+DATABASE_URL=postgresql://alpii:alpii_password@localhost:5433/alpii?schema=public
+```
+
+If Prisma reports `P1001: Can't reach database server`, start or inspect the infra containers:
+
+```bash
+docker compose -f docker-compose.infra.yml --env-file .env.local up -d
+docker compose -f docker-compose.infra.yml ps
+```
+
+If Prisma reports `P1010: User was denied access on the database`, compare `backend/.env` with `docker-compose.infra.yml` and `.env.local`. These values must agree:
+
+```txt
+POSTGRES_USER=alpii
+POSTGRES_PASSWORD=alpii_password
+POSTGRES_DB=alpii
+POSTGRES_PORT=5433
+```
+
+This project uses `5433` for hybrid mode because macOS or another local PostgreSQL instance can already occupy `127.0.0.1:5432`. If you intentionally switch back to `5432`, stop the local PostgreSQL service first and update `POSTGRES_PORT` and every `DATABASE_URL` reference consistently. Do not leave mixed `5432` and `5433` values.
 
 ## Environment Files
 

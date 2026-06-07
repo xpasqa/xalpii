@@ -11,6 +11,7 @@ import {
 } from "../../../components/ui";
 import { getActivityBySlug } from "../../../data/mock-travel";
 import { formatMoney } from "../../../lib/money";
+import { getPublicActivity, mapPublicActivity } from "../../../lib/public-marketplace";
 import { routes } from "../../../lib/routes";
 
 type CheckoutPageProps = {
@@ -21,7 +22,7 @@ type CheckoutPageProps = {
 
 export default async function CheckoutPlaceholderPage({ params }: CheckoutPageProps) {
   const { activitySlug } = await params;
-  const activity = getActivityBySlug(activitySlug);
+  const activity = await loadCheckoutActivity(activitySlug);
 
   if (!activity) {
     return (
@@ -114,4 +115,12 @@ export default async function CheckoutPlaceholderPage({ params }: CheckoutPagePr
       <SiteFooter />
     </PublicShell>
   );
+}
+
+async function loadCheckoutActivity(activitySlug: string) {
+  try {
+    return mapPublicActivity(await getPublicActivity(activitySlug));
+  } catch {
+    return getActivityBySlug(activitySlug);
+  }
 }

@@ -7,14 +7,22 @@ import {
 } from "../components/domain/public";
 import { PublicShell } from "../components/layout";
 import { cities, getFeaturedActivities } from "../data/mock-travel";
+import {
+  getPublicActivities,
+  getPublicCities,
+  mapPublicActivity,
+  mapPublicCity
+} from "../lib/public-marketplace";
 
-export default function Home() {
+export default async function Home() {
+  const { featuredCities, featuredActivities } = await loadHomeData();
+
   return (
     <PublicShell>
       <HeroSection />
-      <FeaturedCities cities={cities} />
+      <FeaturedCities cities={featuredCities} />
       <ActivityGrid
-        activities={getFeaturedActivities(12)}
+        activities={featuredActivities}
         showCategories
         title="Curated activities"
       />
@@ -22,4 +30,23 @@ export default function Home() {
       <SiteFooter />
     </PublicShell>
   );
+}
+
+async function loadHomeData() {
+  try {
+    const [publicCities, publicActivities] = await Promise.all([
+      getPublicCities(),
+      getPublicActivities({ limit: 12 })
+    ]);
+
+    return {
+      featuredCities: publicCities.map(mapPublicCity),
+      featuredActivities: publicActivities.map(mapPublicActivity)
+    };
+  } catch {
+    return {
+      featuredCities: cities,
+      featuredActivities: getFeaturedActivities(12)
+    };
+  }
 }

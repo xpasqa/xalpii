@@ -4,7 +4,7 @@ import type { ReactNode } from "react";
 import { useEffect, useState } from "react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { Globe2, Heart, Search, ShoppingCart, UserRound } from "lucide-react";
+import { Search } from "lucide-react";
 import { routes } from "../../lib/routes";
 
 type PublicShellProps = {
@@ -99,15 +99,16 @@ export function PublicShell({ children }: PublicShellProps) {
             </>
           )}
 
-          <nav className="ml-auto flex items-center gap-4 text-[12px] font-semibold text-travel-muted sm:gap-6">
-            <NavIcon href={routes.city("bali")} icon={<Heart className="size-6" />} label="Wishlist" />
-            <NavIcon
-              href={routes.activity("ubud-cooking-class-market-visit")}
-              icon={<ShoppingCart className="size-6" />}
-              label="Cart"
-            />
-            <NavIcon icon={<Globe2 className="size-6" />} label="EN/IDR Rp" />
-            <NavIcon icon={<UserRound className="size-6" />} label="Profile" />
+          <nav className="ml-auto flex items-center gap-3 text-[13px] font-semibold text-travel-dark sm:gap-5">
+            <Link className="hidden transition hover:text-travel-primary sm:inline" href={routes.login}>
+              Login
+            </Link>
+            <Link
+              className="rounded-full border border-[#2B2B2B]/20 px-4 py-2 transition hover:border-travel-primary/40 hover:text-travel-primary"
+              href={routes.partnerRegister}
+            >
+              Become a partner
+            </Link>
           </nav>
         </div>
       </header>
@@ -134,25 +135,5 @@ function DetailPageNav() {
         </a>
       ))}
     </nav>
-  );
-}
-
-function NavIcon({
-  icon,
-  label,
-  href = "/"
-}: {
-  icon: ReactNode;
-  label: string;
-  href?: string;
-}) {
-  return (
-    <Link
-      className="flex flex-col items-center gap-1 text-travel-muted transition hover:text-travel-dark"
-      href={href}
-    >
-      <span className="text-travel-dark">{icon}</span>
-      <span className="hidden whitespace-nowrap sm:block">{label}</span>
-    </Link>
   );
 }

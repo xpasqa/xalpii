@@ -6,3 +6,386 @@ datasource db {
   provider = "postgresql"
   url      = env("DATABASE_URL")
 }
+
+enum UserRole {
+  USER
+  PARTNER
+  ADMIN
+  SUPER_ADMIN
+}
+
+enum UserStatus {
+  ACTIVE
+  INACTIVE
+  SUSPENDED
+}
+
+enum PartnerStatus {
+  DRAFT
+  PENDING_REVIEW
+  APPROVED
+  REJECTED
+  SUSPENDED
+}
+
+enum ActivityStatus {
+  DRAFT
+  PENDING_REVIEW
+  REVISION_REQUESTED
+  APPROVED
+  PUBLISHED
+  REJECTED
+  ARCHIVED
+}
+
+enum FileVisibility {
+  PUBLIC
+  PRIVATE
+}
+
+enum BookingStatus {
+  PENDING_PAYMENT
+  CONFIRMED
+  CANCELLED
+  COMPLETED
+  REFUNDED
+}
+
+enum PaymentStatus {
+  PENDING
+  PAID
+  FAILED
+  EXPIRED
+  REFUNDED
+}
+
+enum PaymentProvider {
+  DUMMY
+  STRIPE
+}
+
+enum VoucherStatus {
+  ACTIVE
+  USED
+  CANCELLED
+  EXPIRED
+}
+
+enum PayoutStatus {
+  PENDING
+  PROCESSING
+  PAID
+  FAILED
+  CANCELLED
+}
+
+model User {
+  id           String     @id @default(uuid()) @db.Uuid
+  email        String     @unique
+  passwordHash String?    @map("password_hash")
+  fullName     String     @map("full_name")
+  role         UserRole   @default(USER)
+  status       UserStatus @default(ACTIVE)
+  createdAt    DateTime   @default(now()) @map("created_at")
+  updatedAt    DateTime   @updatedAt @map("updated_at")
+
+  partner        Partner?
+  bookings       Booking[]
+  reviews        Review[]
+  uploadedFiles  FileAsset[] @relation("UploadedFiles")
+  auditLogEvents AuditLog[]  @relation("AuditLogActor")
+
+  @@map("users")
+}
+
+model Partner {
+  id           String        @id @default(uuid()) @db.Uuid
+  userId       String        @unique @map("user_id") @db.Uuid
+  businessName String        @map("business_name")
+  legalName    String?       @map("legal_name")
+  status       PartnerStatus @default(DRAFT)
+  phone        String?
+  country      String?
+  city         String?
+  address      String?
+  description  String?
+  createdAt    DateTime      @default(now()) @map("created_at")
+  updatedAt    DateTime      @updatedAt @map("updated_at")
+
+  user       User       @relation(fields: [userId], references: [id], onDelete: Cascade)
+  activities Activity[]
+  payouts    Payout[]
+
+  @@map("partners")
+}
+
+model City {
+  id          String   @id @default(uuid()) @db.Uuid
+  name        String
+  slug        String   @unique
+  country     String
+  description String?
+  imageFileId String?  @map("image_file_id") @db.Uuid
+  isActive    Boolean  @default(true) @map("is_active")
+  sortOrder   Int      @default(0) @map("sort_order")
+  createdAt   DateTime @default(now()) @map("created_at")
+  updatedAt   DateTime @updatedAt @map("updated_at")
+
+  imageFile  FileAsset? @relation("CityImage", fields: [imageFileId], references: [id], onDelete: SetNull)
+  activities Activity[]
+
+  @@map("cities")
+}
+
+model Category {
+  id          String   @id @default(uuid()) @db.Uuid
+  name        String
+  slug        String   @unique
+  description String?
+  icon        String?
+  isActive    Boolean  @default(true) @map("is_active")
+  sortOrder   Int      @default(0) @map("sort_order")
+  createdAt   DateTime @default(now()) @map("created_at")
+  updatedAt   DateTime @updatedAt @map("updated_at")
+
+  activities Activity[]
+
+  @@map("categories")
+}
+
+model Activity {
+  id                 String         @id @default(uuid()) @db.Uuid
+  partnerId          String         @map("partner_id") @db.Uuid
+  cityId             String         @map("city_id") @db.Uuid
+  categoryId         String         @map("category_id") @db.Uuid
+  title              String
+  slug               String         @unique
+  shortDescription   String         @map("short_description")
+  description        String
+  status             ActivityStatus @default(DRAFT)
+  durationLabel      String?        @map("duration_label")
+  meetingPoint       String?        @map("meeting_point")
+  cancellationPolicy String?        @map("cancellation_policy")
+  importantInfo      String?        @map("important_info")
+  included           Json           @default("[]")
+  notIncluded        Json           @default("[]") @map("not_included")
+  highlights         Json           @default("[]")
+  itinerary          Json?
+  ratingAverage      Decimal        @default(0) @map("rating_average") @db.Decimal(3, 2)
+  reviewCount        Int            @default(0) @map("review_count")
+  createdAt          DateTime       @default(now()) @map("created_at")
+  updatedAt          DateTime       @updatedAt @map("updated_at")
+  publishedAt        DateTime?      @map("published_at")
+
+  partner       Partner                @relation(fields: [partnerId], references: [id], onDelete: Restrict)
+  city          City                   @relation(fields: [cityId], references: [id], onDelete: Restrict)
+  category      Category               @relation(fields: [categoryId], references: [id], onDelete: Restrict)
+  media         ActivityMedia[]
+  pricing       ActivityPricing[]
+  availability  ActivityAvailability[]
+  bookings      Booking[]
+  reviews       Review[]
+
+  @@index([cityId, status])
+  @@index([categoryId, status])
+  @@index([partnerId])
+  @@map("activities")
+}
+
+model ActivityMedia {
+  id         String   @id @default(uuid()) @db.Uuid
+  activityId String   @map("activity_id") @db.Uuid
+  fileId     String?  @map("file_id") @db.Uuid
+  url        String?
+  altText    String?  @map("alt_text")
+  sortOrder  Int      @default(0) @map("sort_order")
+  isCover    Boolean  @default(false) @map("is_cover")
+  createdAt  DateTime @default(now()) @map("created_at")
+
+  activity Activity   @relation(fields: [activityId], references: [id], onDelete: Cascade)
+  file     FileAsset? @relation("ActivityMediaFile", fields: [fileId], references: [id], onDelete: SetNull)
+
+  @@index([activityId, sortOrder])
+  @@map("activity_media")
+}
+
+model ActivityPricing {
+  id         String   @id @default(uuid()) @db.Uuid
+  activityId String   @map("activity_id") @db.Uuid
+  currency   String
+  priceCents Int      @map("price_cents")
+  priceType  String   @map("price_type")
+  isActive   Boolean  @default(true) @map("is_active")
+  createdAt  DateTime @default(now()) @map("created_at")
+  updatedAt  DateTime @updatedAt @map("updated_at")
+
+  activity Activity @relation(fields: [activityId], references: [id], onDelete: Cascade)
+
+  @@index([activityId, isActive])
+  @@map("activity_pricing")
+}
+
+model ActivityAvailability {
+  id            String    @id @default(uuid()) @db.Uuid
+  activityId    String    @map("activity_id") @db.Uuid
+  startDateTime DateTime  @map("start_date_time")
+  endDateTime   DateTime? @map("end_date_time")
+  capacity      Int?
+  bookedCount   Int       @default(0) @map("booked_count")
+  isActive      Boolean   @default(true) @map("is_active")
+  createdAt     DateTime  @default(now()) @map("created_at")
+  updatedAt     DateTime  @updatedAt @map("updated_at")
+
+  activity Activity  @relation(fields: [activityId], references: [id], onDelete: Cascade)
+  bookings Booking[]
+
+  @@index([activityId, startDateTime])
+  @@map("activity_availability")
+}
+
+model FileAsset {
+  id           String         @id @default(uuid()) @db.Uuid
+  bucket       String
+  objectKey    String         @map("object_key")
+  url          String?
+  visibility   FileVisibility @default(PRIVATE)
+  mimeType     String?        @map("mime_type")
+  sizeBytes    Int?           @map("size_bytes")
+  originalName String?        @map("original_name")
+  uploadedById String?        @map("uploaded_by_id") @db.Uuid
+  createdAt    DateTime       @default(now()) @map("created_at")
+
+  uploadedBy    User?           @relation("UploadedFiles", fields: [uploadedById], references: [id], onDelete: SetNull)
+  cityImages    City[]          @relation("CityImage")
+  activityMedia ActivityMedia[] @relation("ActivityMediaFile")
+
+  @@unique([bucket, objectKey])
+  @@index([uploadedById])
+  @@map("file_assets")
+}
+
+model Booking {
+  id                 String        @id @default(uuid()) @db.Uuid
+  userId             String        @map("user_id") @db.Uuid
+  activityId         String        @map("activity_id") @db.Uuid
+  availabilityId     String?       @map("availability_id") @db.Uuid
+  status             BookingStatus @default(PENDING_PAYMENT)
+  currency           String
+  totalAmountCents   Int           @map("total_amount_cents")
+  platformFeeCents   Int           @default(0) @map("platform_fee_cents")
+  partnerPayoutCents Int           @default(0) @map("partner_payout_cents")
+  bookedAt           DateTime      @default(now()) @map("booked_at")
+  createdAt          DateTime      @default(now()) @map("created_at")
+  updatedAt          DateTime      @updatedAt @map("updated_at")
+
+  user         User                  @relation(fields: [userId], references: [id], onDelete: Restrict)
+  activity     Activity              @relation(fields: [activityId], references: [id], onDelete: Restrict)
+  availability ActivityAvailability? @relation(fields: [availabilityId], references: [id], onDelete: SetNull)
+  participants BookingParticipant[]
+  payment      Payment?
+  voucher      Voucher?
+  reviews      Review[]
+
+  @@index([userId, status])
+  @@index([activityId])
+  @@map("bookings")
+}
+
+model BookingParticipant {
+  id         String   @id @default(uuid()) @db.Uuid
+  bookingId  String   @map("booking_id") @db.Uuid
+  label      String
+  quantity   Int
+  priceCents Int      @map("price_cents")
+  createdAt  DateTime @default(now()) @map("created_at")
+
+  booking Booking @relation(fields: [bookingId], references: [id], onDelete: Cascade)
+
+  @@map("booking_participants")
+}
+
+model Payment {
+  id                String          @id @default(uuid()) @db.Uuid
+  bookingId         String          @unique @map("booking_id") @db.Uuid
+  provider          PaymentProvider @default(DUMMY)
+  status            PaymentStatus   @default(PENDING)
+  amountCents       Int             @map("amount_cents")
+  currency          String
+  providerReference String?         @map("provider_reference")
+  paidAt            DateTime?       @map("paid_at")
+  createdAt         DateTime        @default(now()) @map("created_at")
+  updatedAt         DateTime        @updatedAt @map("updated_at")
+
+  booking Booking @relation(fields: [bookingId], references: [id], onDelete: Cascade)
+
+  @@map("payments")
+}
+
+model Voucher {
+  id        String        @id @default(uuid()) @db.Uuid
+  bookingId String        @unique @map("booking_id") @db.Uuid
+  code      String        @unique
+  qrPayload String        @map("qr_payload")
+  status    VoucherStatus @default(ACTIVE)
+  usedAt    DateTime?     @map("used_at")
+  createdAt DateTime      @default(now()) @map("created_at")
+  updatedAt DateTime      @updatedAt @map("updated_at")
+
+  booking Booking @relation(fields: [bookingId], references: [id], onDelete: Cascade)
+
+  @@map("vouchers")
+}
+
+model Review {
+  id          String   @id @default(uuid()) @db.Uuid
+  userId      String   @map("user_id") @db.Uuid
+  activityId  String   @map("activity_id") @db.Uuid
+  bookingId   String?  @map("booking_id") @db.Uuid
+  rating      Int
+  title       String?
+  comment     String?
+  isPublished Boolean  @default(false) @map("is_published")
+  createdAt   DateTime @default(now()) @map("created_at")
+  updatedAt   DateTime @updatedAt @map("updated_at")
+
+  user     User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  activity Activity @relation(fields: [activityId], references: [id], onDelete: Cascade)
+  booking  Booking? @relation(fields: [bookingId], references: [id], onDelete: SetNull)
+
+  @@index([activityId, isPublished])
+  @@map("reviews")
+}
+
+model Payout {
+  id          String       @id @default(uuid()) @db.Uuid
+  partnerId   String       @map("partner_id") @db.Uuid
+  currency    String
+  amountCents Int          @map("amount_cents")
+  status      PayoutStatus @default(PENDING)
+  reference   String?
+  notes       String?
+  paidAt      DateTime?    @map("paid_at")
+  createdAt   DateTime     @default(now()) @map("created_at")
+  updatedAt   DateTime     @updatedAt @map("updated_at")
+
+  partner Partner @relation(fields: [partnerId], references: [id], onDelete: Restrict)
+
+  @@index([partnerId, status])
+  @@map("payouts")
+}
+
+model AuditLog {
+  id          String   @id @default(uuid()) @db.Uuid
+  actorUserId String?  @map("actor_user_id") @db.Uuid
+  action      String
+  entityType  String   @map("entity_type")
+  entityId    String?  @map("entity_id")
+  metadata    Json?
+  createdAt   DateTime @default(now()) @map("created_at")
+
+  actorUser User? @relation("AuditLogActor", fields: [actorUserId], references: [id], onDelete: SetNull)
+
+  @@index([actorUserId])
+  @@index([entityType, entityId])
+  @@map("audit_logs")
+}

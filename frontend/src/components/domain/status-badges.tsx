@@ -3,6 +3,7 @@ import { Badge } from "../ui";
 export type ActivityStatus =
   | "DRAFT"
   | "PENDING_REVIEW"
+  | "REVISION_REQUESTED"
   | "APPROVED"
   | "PUBLISHED"
   | "REJECTED"
@@ -20,6 +21,7 @@ export type PaymentStatus = "PENDING" | "PAID" | "FAILED" | "EXPIRED" | "REFUNDE
 const activityLabels: Record<ActivityStatus, string> = {
   DRAFT: "Draft",
   PENDING_REVIEW: "Pending review",
+  REVISION_REQUESTED: "Revision requested",
   APPROVED: "Approved",
   PUBLISHED: "Published",
   REJECTED: "Rejected",
@@ -48,7 +50,7 @@ export function ActivityStatusBadge({ status }: { status: ActivityStatus }) {
       ? "success"
       : status === "REJECTED" || status === "ARCHIVED"
         ? "danger"
-        : status === "PENDING_REVIEW"
+        : status === "PENDING_REVIEW" || status === "REVISION_REQUESTED"
           ? "warning"
           : "neutral";
 

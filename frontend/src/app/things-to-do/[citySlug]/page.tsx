@@ -8,6 +8,12 @@ import {
 } from "../../../components/domain/public";
 import { PublicShell } from "../../../components/layout";
 import { getActivitiesByCity, getCityBySlug } from "../../../data/mock-travel";
+import {
+  getPublicActivities,
+  getPublicCity,
+  mapPublicActivity,
+  mapPublicCity
+} from "../../../lib/public-marketplace";
 
 type CityPageProps = {
   params: Promise<{
@@ -17,7 +23,7 @@ type CityPageProps = {
 
 export default async function CityPage({ params }: CityPageProps) {
   const { citySlug } = await params;
-  const city = getCityBySlug(citySlug);
+  const { city, activities } = await loadCityData(citySlug);
 
   if (!city) {
     return (
@@ -33,14 +39,12 @@ export default async function CityPage({ params }: CityPageProps) {
     );
   }
 
-  const cityActivities = getActivitiesByCity(city.slug);
-
   return (
     <PublicShell>
       <CityHero city={city} />
       <CategoryChips />
       <ActivityGrid
-        activities={cityActivities}
+        activities={activities}
         description={`Handpicked activities and local experiences in ${city.name}.`}
         title={`Popular in ${city.name}`}
       />
@@ -48,4 +52,25 @@ export default async function CityPage({ params }: CityPageProps) {
       <SiteFooter />
     </PublicShell>
   );
+}
+
+async function loadCityData(citySlug: string) {
+  try {
+    const [publicCity, publicActivities] = await Promise.all([
+      getPublicCity(citySlug),
+      getPublicActivities({ citySlug })
+    ]);
+
+    return {
+      city: mapPublicCity(publicCity),
+      activities: publicActivities.map(mapPublicActivity)
+    };
+  } catch {
+    const city = getCityBySlug(citySlug);
+
+    return {
+      city,
+      activities: city ? getActivitiesByCity(city.slug) : []
+    };
+  }
 }

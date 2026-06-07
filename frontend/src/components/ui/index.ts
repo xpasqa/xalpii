@@ -3,6 +3,7 @@ export * from "./button";
 export * from "./ButtonCTA";
 export * from "./card";
 export * from "./data-table";
+export * from "./dialog";
 export * from "./empty-state";
 export * from "./error-state";
 export * from "./input";

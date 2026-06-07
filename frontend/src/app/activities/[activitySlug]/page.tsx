@@ -10,6 +10,7 @@ import {
 import { PublicShell } from "../../../components/layout";
 import { EmptyState } from "../../../components/ui";
 import { getActivityBySlug } from "../../../data/mock-travel";
+import { getPublicActivity, mapPublicActivity } from "../../../lib/public-marketplace";
 
 type ActivityPageProps = {
   params: Promise<{
@@ -19,7 +20,7 @@ type ActivityPageProps = {
 
 export default async function ActivityPage({ params }: ActivityPageProps) {
   const { activitySlug } = await params;
-  const activity = getActivityBySlug(activitySlug);
+  const activity = await loadActivityData(activitySlug);
 
   if (!activity) {
     return (
@@ -60,4 +61,12 @@ export default async function ActivityPage({ params }: ActivityPageProps) {
       <SiteFooter />
     </PublicShell>
   );
+}
+
+async function loadActivityData(activitySlug: string) {
+  try {
+    return mapPublicActivity(await getPublicActivity(activitySlug));
+  } catch {
+    return getActivityBySlug(activitySlug);
+  }
 }
