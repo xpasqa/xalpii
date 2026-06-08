@@ -55,7 +55,9 @@ export type Booking = {
   id: string;
   userId: string;
   activityId: string;
+  optionId?: string | null;
   availabilityId?: string | null;
+  travelDate?: string | null;
   status: BookingStatus;
   currency: string;
   totalAmountCents: number;
@@ -72,6 +74,12 @@ export type Booking = {
     capacity?: number | null;
     bookedCount: number;
     isActive: boolean;
+  } | null;
+  option?: {
+    id: string;
+    title: string;
+    slug: string;
+    availabilityMode: "SCHEDULED_SESSIONS" | "ALWAYS_AVAILABLE";
   } | null;
   participants: BookingParticipant[];
   payment?: BookingPayment | null;
@@ -90,6 +98,8 @@ export type VoucherValidationResult = BookingVoucher & {
 export async function createBooking(input: {
   activityId: string;
   availabilityId?: string;
+  optionId?: string;
+  selectedDate?: string;
   participants: Array<{
     participantType: "ADULT" | "CHILD";
     label: string;

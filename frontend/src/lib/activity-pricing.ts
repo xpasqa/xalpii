@@ -46,21 +46,23 @@ export function calculatePricingEstimate(input: {
   if (input.pricingMode === "GROUP_TIER" && !tier) return null;
   if (!tier && !input.simplePrice) return null;
 
-  const currency = tier?.currency ?? input.simplePrice!.currency;
   const adultUnitPriceCents = tier?.adultPriceCents ?? input.simplePrice!.priceCents;
-  const discount = Number(tier?.childDiscountPercent ?? 27);
   const childUnitPriceCents =
-    tier?.childPriceCents ??
-    (tier ? Math.round(adultUnitPriceCents * (1 - discount / 100)) : adultUnitPriceCents);
+    tier?.childPriceCents == null
+      ? tier
+        ? null
+        : adultUnitPriceCents
+      : tier.childPriceCents;
+  if (children > 0 && childUnitPriceCents == null) return null;
   const adultLineTotalCents = adults * adultUnitPriceCents;
-  const childLineTotalCents = children * childUnitPriceCents;
+  const childLineTotalCents = children * (childUnitPriceCents ?? 0);
 
   return {
     adultLineTotalCents,
     adultUnitPriceCents,
     childLineTotalCents,
-    childUnitPriceCents,
-    currency,
+    childUnitPriceCents: childUnitPriceCents ?? 0,
+    currency: "USD",
     tier,
     totalAmountCents: adultLineTotalCents + childLineTotalCents,
     totalTravelers

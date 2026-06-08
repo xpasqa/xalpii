@@ -35,7 +35,11 @@ import type {
   PartnerActivityInput
 } from "../../../lib/partner-activities";
 import { formatDate } from "../../../lib/dates";
-import { formatMoney } from "../../../lib/money";
+import {
+  formatBaseUsd,
+  parseUsdInputToMinor,
+  usdMinorToInput
+} from "../../../lib/money";
 import { routes } from "../../../lib/routes";
 import {
   Badge,
@@ -630,6 +634,59 @@ export function AdminActivityReviewManager({ activityId }: { activityId: string 
 
             <Card>
               <CardHeader>
+                <CardTitle>Experience options</CardTitle>
+                <CardDescription>Package variants, availability mode, and USD tier pricing.</CardDescription>
+              </CardHeader>
+              <CardContent className="grid gap-4">
+                {activity.options?.length ? (
+                  activity.options.map((option) => (
+                    <div className="rounded-travel-lg border border-[#2B2B2B]/15 p-4" key={option.id}>
+                      <div className="flex flex-wrap items-start justify-between gap-3">
+                        <div>
+                          <div className="flex flex-wrap items-center gap-2">
+                            <p className="font-interface text-sm font-semibold text-travel-dark">{option.title}</p>
+                            {option.isDefault ? <Badge variant="info">Default</Badge> : null}
+                            <Badge variant={option.isActive ? "success" : "neutral"}>{option.isActive ? "Active" : "Inactive"}</Badge>
+                          </div>
+                          <p className="mt-1 text-xs text-travel-muted">
+                            {option.availabilityMode === "ALWAYS_AVAILABLE" ? "Always available" : "Scheduled sessions"}
+                            {option.durationLabel ? ` · ${option.durationLabel}` : ""}
+                          </p>
+                        </div>
+                        <p className="text-xs font-semibold text-travel-muted">
+                          {option.availabilityMode === "ALWAYS_AVAILABLE"
+                            ? `Days: ${(option.availableDays ?? []).join(", ") || "Every day"} · Capacity: ${option.dailyCapacity ?? "Open"}`
+                            : `${option.availability.length} sessions`}
+                        </p>
+                      </div>
+                      {option.pricingTiers.length ? (
+                        <div className="mt-4 overflow-hidden rounded-travel-md border border-[#2B2B2B]/15">
+                          <div className="grid grid-cols-3 gap-2 bg-travel-bg px-3 py-2 text-[11px] font-semibold text-travel-muted">
+                            <span>Travelers</span>
+                            <span>Adult</span>
+                            <span>Child</span>
+                          </div>
+                          {option.pricingTiers.map((tier) => (
+                            <div className="grid grid-cols-3 gap-2 border-t border-[#2B2B2B]/10 px-3 py-2 text-xs" key={tier.id}>
+                              <span>{tier.minTravelers === tier.maxTravelers ? tier.minTravelers : `${tier.minTravelers}-${tier.maxTravelers}`}</span>
+                              <span>{formatBaseUsd(tier.adultPriceCents)}</span>
+                              <span>{formatBaseUsd(tier.childPriceCents ?? Math.round(tier.adultPriceCents * 0.73))}</span>
+                            </div>
+                          ))}
+                        </div>
+                      ) : (
+                        <p className="mt-3 text-sm text-travel-muted">No option pricing tiers.</p>
+                      )}
+                    </div>
+                  ))
+                ) : (
+                  <EmptyState title="No package options" description="This activity still relies on legacy activity-level pricing." />
+                )}
+              </CardContent>
+            </Card>
+
+            <Card>
+              <CardHeader>
                 <CardTitle>Media</CardTitle>
                 <CardDescription>Images attached by the partner.</CardDescription>
               </CardHeader>
@@ -679,8 +736,8 @@ export function AdminActivityReviewManager({ activityId }: { activityId: string 
                     {activity.pricingTiers.map((tier) => (
                       <div className="grid grid-cols-3 gap-2 border-t border-[#2B2B2B]/10 px-3 py-2 text-xs" key={tier.id}>
                         <span>{tier.minTravelers === tier.maxTravelers ? tier.minTravelers : `${tier.minTravelers}-${tier.maxTravelers}`}</span>
-                        <span>{formatMoney(tier.adultPriceCents, tier.currency)}</span>
-                        <span>{formatMoney(tier.childPriceCents ?? Math.round(tier.adultPriceCents * 0.73), tier.currency)}</span>
+                        <span>{formatBaseUsd(tier.adultPriceCents)}</span>
+                        <span>{formatBaseUsd(tier.childPriceCents ?? Math.round(tier.adultPriceCents * 0.73))}</span>
                       </div>
                     ))}
                   </div>
@@ -1301,8 +1358,10 @@ function AdminPricingCard({
   onUpdated: () => Promise<void>;
 }) {
   const activePrice = activity.pricing.find((price) => price.isActive) ?? activity.pricing[0];
-  const [currency, setCurrency] = useState(activePrice?.currency ?? "IDR");
-  const [priceCents, setPriceCents] = useState(String(activePrice?.priceCents ?? ""));
+  const currency = "USD";
+  const [priceInput, setPriceInput] = useState(
+    activePrice ? usdMinorToInput(activePrice.priceCents) : ""
+  );
   const [priceType, setPriceType] = useState(activePrice?.priceType ?? "per_person");
   const [error, setError] = useState<string | null>(null);
   const [isSaving, setIsSaving] = useState(false);
@@ -1316,7 +1375,7 @@ function AdminPricingCard({
       await upsertAdminActivityPricing(activity.id, {
         currency,
         isActive: true,
-        priceCents: Number(priceCents),
+        priceCents: parseUsdInputToMinor(priceInput),
         priceType
       });
       await onUpdated();
@@ -1347,8 +1406,8 @@ function AdminPricingCard({
             {activity.pricingTiers.map((tier) => (
               <div className="grid grid-cols-4 gap-3 border-t border-[#2B2B2B]/10 px-4 py-3 text-sm" key={tier.id}>
                 <span>{tier.minTravelers === tier.maxTravelers ? tier.minTravelers : `${tier.minTravelers}-${tier.maxTravelers}`}</span>
-                <span>{formatMoney(tier.adultPriceCents, tier.currency)}</span>
-                <span>{formatMoney(tier.childPriceCents ?? Math.round(tier.adultPriceCents * 0.73), tier.currency)}</span>
+                <span>{formatBaseUsd(tier.adultPriceCents)}</span>
+                <span>{formatBaseUsd(tier.childPriceCents ?? Math.round(tier.adultPriceCents * 0.73))}</span>
                 <span>{Number(tier.childDiscountPercent ?? 27)}%</span>
               </div>
             ))}
@@ -1362,12 +1421,14 @@ function AdminPricingCard({
     <Card>
       <CardHeader>
         <CardTitle>Pricing</CardTitle>
-        <CardDescription>Admin can adjust the primary price before publishing.</CardDescription>
+        <CardDescription>
+          Admin can adjust the USD base price before publishing. Public conversion is display-only.
+        </CardDescription>
       </CardHeader>
       <CardContent>
         <form className="grid gap-3 md:grid-cols-[120px_1fr_1fr_auto]" onSubmit={save}>
-          <Input onChange={(event) => setCurrency(event.target.value)} placeholder="IDR" required value={currency} />
-          <Input min={0} onChange={(event) => setPriceCents(event.target.value)} placeholder="Price cents/minor units" required type="number" value={priceCents} />
+          <Input disabled readOnly value={currency} />
+          <Input min={0} onChange={(event) => setPriceInput(event.target.value)} placeholder="Price in USD" required step="0.01" type="number" value={priceInput} />
           <Input onChange={(event) => setPriceType(event.target.value)} placeholder="per_person" required value={priceType} />
           <ButtonCTA disabled={isSaving} type="submit" variant="outline">
             Save price
@@ -1375,7 +1436,7 @@ function AdminPricingCard({
         </form>
         {activePrice ? (
           <p className="mt-3 text-sm text-travel-muted">
-            Current active price: {formatMoney(activePrice.priceCents, activePrice.currency)}
+            Current active price: {formatBaseUsd(activePrice.priceCents)}
           </p>
         ) : null}
         {error ? <p className="mt-3 text-sm font-medium text-red-700">{error}</p> : null}
@@ -1693,7 +1754,7 @@ function formatActivityPrice(activity: AdminActivity) {
   const pricing = activity.pricing.find((item) => item.isActive) ?? activity.pricing[0];
   if (!pricing) return "No pricing";
 
-  return formatMoney(pricing.priceCents, pricing.currency);
+  return formatBaseUsd(pricing.priceCents);
 }
 
 function getAdminEditReadiness(activity: AdminActivity, form: ActivityFormState) {

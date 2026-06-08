@@ -4,6 +4,7 @@ import { Heart, Star } from "lucide-react";
 import type { CurrencyCode, ID } from "../../../types/common";
 import { formatMoney } from "../../../lib/money";
 import { cn } from "../../../lib/utils";
+import { useCurrency } from "../../providers/CurrencyProvider";
 
 type ActivityCardProps = {
   id: ID;
@@ -30,12 +31,13 @@ export function ActivityCard({
   rating,
   reviewCount,
   price,
-  currency,
   href,
   badge,
   isFavorite = false,
   onFavoriteClick
 }: ActivityCardProps) {
+  const { currency: displayCurrency } = useCurrency();
+
   return (
     <a
       className="group block overflow-hidden rounded-travel-lg border border-travel-border bg-white shadow-sm transition duration-300 hover:-translate-y-0.5 hover:border-travel-primary/20 hover:shadow-[0_18px_36px_rgba(26,26,26,0.10)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-travel-primary/30 focus-visible:ring-offset-2"
@@ -84,7 +86,7 @@ export function ActivityCard({
           </span>
           <p className="whitespace-nowrap text-right text-sm font-semibold text-travel-dark">
             <span className="mr-1 text-[11px] font-normal text-travel-muted">From</span>
-            {formatMoney(price, currency)}
+            {formatMoney(price, displayCurrency)}
           </p>
         </div>
       </div>

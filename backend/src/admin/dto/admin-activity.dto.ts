@@ -24,6 +24,10 @@ export class AdminActivityQueryDto {
 
   @IsOptional()
   @IsString()
+  destinationId?: string;
+
+  @IsOptional()
+  @IsString()
   categoryId?: string;
 
   @IsOptional()

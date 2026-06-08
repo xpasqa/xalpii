@@ -1,6 +1,7 @@
 export * from "./badge";
 export * from "./button";
 export * from "./ButtonCTA";
+export * from "./calendar";
 export * from "./card";
 export * from "./data-table";
 export * from "./dialog";
@@ -8,5 +9,6 @@ export * from "./empty-state";
 export * from "./error-state";
 export * from "./input";
 export * from "./loading-state";
+export * from "./popover";
 export * from "./select";
 export * from "./textarea";

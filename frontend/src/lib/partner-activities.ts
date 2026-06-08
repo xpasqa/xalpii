@@ -27,6 +27,21 @@ export type LookupCategory = {
   isActive: boolean;
 };
 
+export type LookupDestination = {
+  id: string;
+  name: string;
+  slug: string;
+  type: "COUNTRY" | "REGION" | "CITY" | "AREA";
+  parentId?: string | null;
+  isActive: boolean;
+  breadcrumb?: Array<{
+    id: string;
+    name: string;
+    slug: string;
+    type: "COUNTRY" | "REGION" | "CITY" | "AREA";
+  }>;
+};
+
 export type PartnerActivityPricing = {
   id: string;
   activityId: string;
@@ -45,6 +60,8 @@ export type PartnerActivityPricingTier = ActivityPricingTier & {
   updatedAt: string;
 };
 
+export type AvailabilityMode = "SCHEDULED_SESSIONS" | "ALWAYS_AVAILABLE";
+
 export type PartnerActivityPricingConfig = {
   pricingMode: PricingMode;
   pricing: PartnerActivityPricing[];
@@ -54,6 +71,7 @@ export type PartnerActivityPricingConfig = {
 export type PartnerActivityAvailability = {
   id: string;
   activityId: string;
+  optionId?: string | null;
   startDateTime: string;
   endDateTime?: string | null;
   capacity?: number | null;
@@ -61,6 +79,33 @@ export type PartnerActivityAvailability = {
   isActive: boolean;
   createdAt: string;
   updatedAt: string;
+};
+
+export type PartnerActivityOptionPricingTier = ActivityPricingTier & {
+  id: string;
+  optionId: string;
+  createdAt: string;
+  updatedAt: string;
+};
+
+export type PartnerActivityOption = {
+  id: string;
+  activityId: string;
+  title: string;
+  slug: string;
+  description?: string | null;
+  durationLabel?: string | null;
+  meetingPoint?: string | null;
+  availabilityMode: AvailabilityMode;
+  availableDays?: string[] | null;
+  dailyCapacity?: number | null;
+  isDefault: boolean;
+  isActive: boolean;
+  sortOrder: number;
+  createdAt: string;
+  updatedAt: string;
+  pricingTiers: PartnerActivityOptionPricingTier[];
+  availability: PartnerActivityAvailability[];
 };
 
 export type PartnerActivityMedia = {
@@ -79,6 +124,7 @@ export type PartnerActivity = {
   id: string;
   partnerId: string;
   cityId: string;
+  destinationId?: string | null;
   categoryId: string;
   title: string;
   slug: string;
@@ -100,17 +146,27 @@ export type PartnerActivity = {
   updatedAt: string;
   publishedAt?: string | null;
   city: LookupCity;
+  destination?: LookupDestination | null;
   category: LookupCategory;
   media: PartnerActivityMedia[];
   pricing: PartnerActivityPricing[];
   pricingTiers: PartnerActivityPricingTier[];
   availability?: PartnerActivityAvailability[];
+  options?: PartnerActivityOption[];
+  revisions?: Array<{
+    id: string;
+    status: "DRAFT" | "PENDING_REVIEW" | "REJECTED" | "APPROVED" | "APPLIED" | "CANCELLED";
+    rejectionReason?: string | null;
+    submittedAt?: string | null;
+    updatedAt: string;
+  }>;
 };
 
 export type PartnerActivityInput = {
   title: string;
   slug?: string;
-  cityId: string;
+  cityId?: string;
+  destinationId?: string;
   categoryId: string;
   shortDescription: string;
   description: string;
@@ -135,6 +191,7 @@ export type PartnerPricingInput = {
     maxTravelers: number;
     adultPriceCents: number;
     childPriceCents?: number;
+    childAllowed?: boolean;
     childDiscountPercent?: number;
     isActive?: boolean;
   }>;
@@ -145,6 +202,19 @@ export type PartnerAvailabilityInput = {
   endDateTime?: string;
   capacity?: number;
   isActive?: boolean;
+};
+
+export type PartnerActivityOptionInput = {
+  title: string;
+  slug?: string;
+  description?: string;
+  durationLabel?: string;
+  meetingPoint?: string;
+  availabilityMode?: AvailabilityMode;
+  availableDays?: string[];
+  dailyCapacity?: number;
+  isActive?: boolean;
+  sortOrder?: number;
 };
 
 export type PartnerMediaInput = {
@@ -218,6 +288,92 @@ export async function getPartnerActivityPricing(id: string) {
   );
 }
 
+export async function getPartnerActivityOptions(id: string) {
+  return requireData(
+    await authenticatedFetch<PartnerActivityOption[]>({
+      path: `/partner/activities/${id}/options`
+    })
+  );
+}
+
+export async function createPartnerActivityOption(id: string, input: PartnerActivityOptionInput) {
+  return requireData(
+    await authenticatedFetch<PartnerActivityOption>({
+      body: JSON.stringify(input),
+      method: "POST",
+      path: `/partner/activities/${id}/options`
+    })
+  );
+}
+
+export async function updatePartnerActivityOption(
+  id: string,
+  optionId: string,
+  input: Partial<PartnerActivityOptionInput>
+) {
+  return requireData(
+    await authenticatedFetch<PartnerActivityOption>({
+      body: JSON.stringify(input),
+      method: "PATCH",
+      path: `/partner/activities/${id}/options/${optionId}`
+    })
+  );
+}
+
+export async function deactivatePartnerActivityOption(id: string, optionId: string) {
+  return requireData(
+    await authenticatedFetch<PartnerActivityOption>({
+      method: "DELETE",
+      path: `/partner/activities/${id}/options/${optionId}`
+    })
+  );
+}
+
+export async function upsertPartnerActivityOptionPricing(
+  id: string,
+  optionId: string,
+  input: {
+    currency: string;
+    priceType?: string;
+    tiers: NonNullable<PartnerPricingInput["tiers"]>;
+  }
+) {
+  return requireData(
+    await authenticatedFetch<{ currency: string; pricingTiers: PartnerActivityOptionPricingTier[] }>({
+      body: JSON.stringify(input),
+      method: "PUT",
+      path: `/partner/activities/${id}/options/${optionId}/pricing`
+    })
+  );
+}
+
+export async function createPartnerActivityOptionAvailability(
+  id: string,
+  optionId: string,
+  input: PartnerAvailabilityInput
+) {
+  return requireData(
+    await authenticatedFetch<PartnerActivityAvailability>({
+      body: JSON.stringify(input),
+      method: "POST",
+      path: `/partner/activities/${id}/options/${optionId}/availability`
+    })
+  );
+}
+
+export async function deactivatePartnerActivityOptionAvailability(
+  id: string,
+  optionId: string,
+  availabilityId: string
+) {
+  return requireData(
+    await authenticatedFetch<PartnerActivityAvailability>({
+      method: "DELETE",
+      path: `/partner/activities/${id}/options/${optionId}/availability/${availabilityId}`
+    })
+  );
+}
+
 export async function createPartnerActivityAvailability(
   id: string,
   input: PartnerAvailabilityInput
@@ -271,6 +427,14 @@ export async function getPartnerLookupCategories() {
   return requireData(
     await authenticatedFetch<LookupCategory[]>({
       path: "/partner/lookups/categories"
+    })
+  );
+}
+
+export async function getPartnerLookupDestinations() {
+  return requireData(
+    await authenticatedFetch<LookupDestination[]>({
+      path: "/partner/lookups/destinations"
     })
   );
 }

@@ -1,4 +1,4 @@
-import { formatMoney } from "../../lib/money";
+import { formatBaseUsd } from "../../lib/money";
 import { Button } from "../ui";
 import { ActivityStatusBadge, type ActivityStatus } from "./status-badges";
 
@@ -20,7 +20,6 @@ export function ActivityCard({
   duration,
   rating,
   priceMinor,
-  currency,
   status = "PUBLISHED"
 }: ActivityCardProps) {
   return (
@@ -42,7 +41,7 @@ export function ActivityCard({
           <p className="text-sm text-muted">
             From{" "}
             <span className="text-base font-bold text-ink">
-              {formatMoney(priceMinor, currency)}
+              {formatBaseUsd(priceMinor)}
             </span>
           </p>
           <Button>View</Button>

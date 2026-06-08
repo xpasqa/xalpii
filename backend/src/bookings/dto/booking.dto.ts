@@ -1,6 +1,7 @@
 import { Type } from "class-transformer";
 import {
   IsArray,
+  IsDateString,
   IsEnum,
   IsInt,
   IsOptional,
@@ -33,6 +34,14 @@ export class CreateBookingDto {
   @IsOptional()
   @IsString()
   availabilityId?: string;
+
+  @IsOptional()
+  @IsString()
+  optionId?: string;
+
+  @IsOptional()
+  @IsDateString()
+  selectedDate?: string;
 
   @IsArray()
   @ValidateNested({ each: true })

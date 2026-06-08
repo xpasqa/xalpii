@@ -6,6 +6,7 @@ import {
 } from "@nestjs/common";
 import {
   ActivityStatus,
+  AvailabilityMode,
   BookingStatus,
   PaymentProvider,
   PaymentStatus,
@@ -17,6 +18,7 @@ import {
 } from "@prisma/client";
 import type { AuthenticatedRequestUser } from "../auth/types/auth-user";
 import { PrismaService } from "../prisma.service";
+import { BASE_CURRENCY } from "../common/money.constants";
 import type { AdminBookingQueryDto, CreateBookingDto, PartnerBookingQueryDto } from "./dto/booking.dto";
 
 const platformFeeRate = 0.15;
@@ -40,9 +42,20 @@ const bookingInclude = {
       pricingTiers: {
         where: { isActive: true },
         orderBy: [{ minTravelers: "asc" }, { maxTravelers: "asc" }]
+      },
+      options: {
+        where: { isActive: true },
+        orderBy: [{ sortOrder: "asc" }, { createdAt: "asc" }],
+        include: {
+          pricingTiers: {
+            where: { isActive: true },
+            orderBy: [{ minTravelers: "asc" }, { maxTravelers: "asc" }]
+          }
+        }
       }
     }
   },
+  option: true,
   availability: true,
   participants: true,
   payment: true,
@@ -85,6 +98,16 @@ export class BookingsService {
         pricingTiers: {
           where: { isActive: true },
           orderBy: [{ minTravelers: "asc" }, { maxTravelers: "asc" }]
+        },
+        options: {
+          where: { isActive: true },
+          orderBy: [{ sortOrder: "asc" }, { createdAt: "asc" }],
+          include: {
+            pricingTiers: {
+              where: { isActive: true },
+              orderBy: [{ minTravelers: "asc" }, { maxTravelers: "asc" }]
+            }
+          }
         }
       }
     });
@@ -96,11 +119,41 @@ export class BookingsService {
       });
     }
 
+    const activeOptions = activity.options.filter((option) => option.isActive);
+    const selectedOption = dto.optionId
+      ? activeOptions.find((option) => option.id === dto.optionId)
+      : activeOptions.find((option) => option.isDefault) ?? activeOptions[0] ?? null;
+
+    if (activeOptions.length > 0 && !selectedOption) {
+      throw new BadRequestException({
+        code: "BOOKING_OPTION_REQUIRED",
+        message: "Select an active package option before booking"
+      });
+    }
+
+    const optionPricingTiers = selectedOption?.pricingTiers ?? [];
     const simplePricing = activity.pricing[0];
-    if (!simplePricing) {
+    if (!simplePricing && optionPricingTiers.length === 0) {
       throw new BadRequestException({
         code: "BOOKING_PRICE_UNAVAILABLE",
-        message: "Activity does not have active pricing"
+        message: "Activity option does not have active pricing"
+      });
+    }
+
+    const nonUsdTier = activity.pricingTiers.find(
+      (item) => item.currency.toUpperCase() !== BASE_CURRENCY
+    );
+    const nonUsdOptionTier = optionPricingTiers.find(
+      (item) => item.currency.toUpperCase() !== BASE_CURRENCY
+    );
+    if (
+      (simplePricing && simplePricing.currency.toUpperCase() !== BASE_CURRENCY) ||
+      nonUsdTier ||
+      nonUsdOptionTier
+    ) {
+      throw new BadRequestException({
+        code: "BOOKING_BASE_CURRENCY_INVALID",
+        message: "Activity pricing must use USD before it can be booked"
       });
     }
 
@@ -118,17 +171,66 @@ export class BookingsService {
       });
     }
 
-    const availability = dto.availabilityId
-      ? await this.prisma.activityAvailability.findFirst({
-          where: {
-            activityId: activity.id,
-            id: dto.availabilityId,
-            isActive: true
-          }
-        })
-      : null;
+    let availability: Awaited<ReturnType<typeof this.prisma.activityAvailability.findFirst>> = null;
+    let travelDate: Date | null = null;
+    let alwaysAvailableInventory:
+      | {
+          capacity: number;
+          optionId: string;
+          travelDate: Date;
+        }
+      | null = null;
 
-    if (dto.availabilityId && !availability) {
+    if (selectedOption?.availabilityMode === AvailabilityMode.ALWAYS_AVAILABLE) {
+      if (!dto.selectedDate) {
+        throw new BadRequestException({
+          code: "BOOKING_TRAVEL_DATE_REQUIRED",
+          message: "Select a travel date for this package option"
+        });
+      }
+      travelDate = normalizeTravelDate(dto.selectedDate);
+      assertAllowedTravelDay(travelDate, selectedOption.availableDays);
+
+      if (selectedOption.dailyCapacity && totalQuantity > selectedOption.dailyCapacity) {
+        throw new BadRequestException({
+          code: "BOOKING_CAPACITY_EXCEEDED",
+          message: "Selected package does not have enough daily capacity"
+        });
+      }
+
+      if (selectedOption.dailyCapacity) {
+        alwaysAvailableInventory = {
+          capacity: selectedOption.dailyCapacity,
+          optionId: selectedOption.id,
+          travelDate
+        };
+      }
+    } else if (selectedOption) {
+      if (!dto.availabilityId) {
+        throw new BadRequestException({
+          code: "BOOKING_AVAILABILITY_REQUIRED",
+          message: "Select a scheduled session for this package option"
+        });
+      }
+      availability = await this.prisma.activityAvailability.findFirst({
+        where: {
+          activityId: activity.id,
+          id: dto.availabilityId,
+          isActive: true,
+          optionId: selectedOption.id
+        }
+      });
+    } else if (dto.availabilityId) {
+      availability = await this.prisma.activityAvailability.findFirst({
+        where: {
+          activityId: activity.id,
+          id: dto.availabilityId,
+          isActive: true
+        }
+      });
+    }
+
+    if (dto.availabilityId && !availability && selectedOption?.availabilityMode !== AvailabilityMode.ALWAYS_AVAILABLE) {
       throw new BadRequestException({
         code: "BOOKING_AVAILABILITY_UNAVAILABLE",
         message: "Selected activity session is not available"
@@ -142,35 +244,40 @@ export class BookingsService {
       });
     }
 
-    const tier =
-      activity.pricingMode === PricingMode.GROUP_TIER
-        ? activity.pricingTiers.find(
-            (item) =>
-              item.isActive &&
-              item.minTravelers <= totalQuantity &&
-              item.maxTravelers >= totalQuantity
-          )
-        : undefined;
+    const pricingTiers = optionPricingTiers.length > 0 ? optionPricingTiers : activity.pricingTiers;
+    const tier = pricingTiers.find(
+      (item) =>
+        item.isActive &&
+        item.minTravelers <= totalQuantity &&
+        item.maxTravelers >= totalQuantity
+    );
 
-    if (activity.pricingMode === PricingMode.GROUP_TIER && !tier) {
+    if (pricingTiers.length > 0 && !tier) {
       throw new BadRequestException({
         code: "BOOKING_PRICING_TIER_UNAVAILABLE",
         message: `No active pricing tier covers ${totalQuantity} travelers`
       });
     }
 
-    const adultUnitPrice = tier?.adultPriceCents ?? simplePricing.priceCents;
-    const childDiscountPercent = Number(tier?.childDiscountPercent ?? 27);
+    const adultUnitPrice = tier?.adultPriceCents ?? simplePricing!.priceCents;
     const childUnitPrice =
-      tier?.childPriceCents ??
-      (tier
-        ? Math.round(tier.adultPriceCents * (1 - childDiscountPercent / 100))
-        : simplePricing.priceCents);
+      tier?.childPriceCents == null
+        ? tier
+          ? null
+          : simplePricing!.priceCents
+        : tier.childPriceCents;
+
+    if (childQuantity > 0 && childUnitPrice == null) {
+      throw new BadRequestException({
+        code: "BOOKING_CHILD_NOT_SUPPORTED",
+        message: "Selected package option is not available for children"
+      });
+    }
     const pricedParticipants = participants.map((participant) => ({
       ...participant,
       priceCents:
         participant.participantType === ParticipantType.CHILD
-          ? childUnitPrice
+          ? childUnitPrice ?? 0
           : adultUnitPrice
     }));
     const totalAmountCents = pricedParticipants.reduce(
@@ -181,11 +288,83 @@ export class BookingsService {
     const partnerPayoutCents = totalAmountCents - platformFeeCents;
 
     const booking = await this.prisma.$transaction(async (tx) => {
+      if (availability) {
+        const capacityUpdate = await tx.activityAvailability.updateMany({
+          where: {
+            id: availability.id,
+            OR: [
+              { capacity: null },
+              {
+                bookedCount: {
+                  lte: Math.max(0, availability.capacity ?? 0) - totalQuantity
+                }
+              }
+            ]
+          },
+          data: {
+            bookedCount: {
+              increment: totalQuantity
+            }
+          }
+        });
+
+        if (capacityUpdate.count !== 1) {
+          throw new BadRequestException({
+            code: "BOOKING_CAPACITY_EXCEEDED",
+            message: "Selected session does not have enough remaining capacity"
+          });
+        }
+      }
+
+      if (alwaysAvailableInventory) {
+        await tx.activityOptionDateInventory.upsert({
+          where: {
+            optionId_travelDate: {
+              optionId: alwaysAvailableInventory.optionId,
+              travelDate: alwaysAvailableInventory.travelDate
+            }
+          },
+          create: {
+            bookedCount: 0,
+            capacity: alwaysAvailableInventory.capacity,
+            optionId: alwaysAvailableInventory.optionId,
+            travelDate: alwaysAvailableInventory.travelDate
+          },
+          update: {
+            capacity: alwaysAvailableInventory.capacity
+          }
+        });
+
+        const capacityUpdate = await tx.activityOptionDateInventory.updateMany({
+          where: {
+            optionId: alwaysAvailableInventory.optionId,
+            travelDate: alwaysAvailableInventory.travelDate,
+            bookedCount: {
+              lte: alwaysAvailableInventory.capacity - totalQuantity
+            }
+          },
+          data: {
+            bookedCount: {
+              increment: totalQuantity
+            }
+          }
+        });
+
+        if (capacityUpdate.count !== 1) {
+          throw new BadRequestException({
+            code: "BOOKING_CAPACITY_EXCEEDED",
+            message: "Selected date does not have enough remaining capacity"
+          });
+        }
+      }
+
       const created = await tx.booking.create({
         data: {
           activityId: activity.id,
           availabilityId: availability?.id,
-          currency: tier?.currency ?? simplePricing.currency,
+          optionId: selectedOption?.id,
+          travelDate,
+          currency: BASE_CURRENCY,
           partnerPayoutCents,
           platformFeeCents,
           status: BookingStatus.PENDING_PAYMENT,
@@ -202,7 +381,7 @@ export class BookingsService {
           payment: {
             create: {
               amountCents: totalAmountCents,
-              currency: tier?.currency ?? simplePricing.currency,
+              currency: BASE_CURRENCY,
               provider: PaymentProvider.DUMMY,
               status: PaymentStatus.PENDING
             }
@@ -210,17 +389,6 @@ export class BookingsService {
         },
         include: bookingInclude
       });
-
-      if (availability) {
-        await tx.activityAvailability.update({
-          where: { id: availability.id },
-          data: {
-            bookedCount: {
-              increment: totalQuantity
-            }
-          }
-        });
-      }
 
       await tx.auditLog.create({
         data: {
@@ -230,8 +398,11 @@ export class BookingsService {
           entityType: "Booking",
           metadata: {
             activityId: activity.id,
+            availabilityMode: selectedOption?.availabilityMode ?? null,
             pricingMode: activity.pricingMode,
             pricingTierId: tier?.id,
+            optionId: selectedOption?.id,
+            travelDate: travelDate?.toISOString(),
             totalAmountCents
           }
         }
@@ -631,4 +802,48 @@ function normalizeParticipants(participants: CreateBookingDto["participants"]) {
   }
 
   return normalized;
+}
+
+const weekdayByIndex = [
+  "SUNDAY",
+  "MONDAY",
+  "TUESDAY",
+  "WEDNESDAY",
+  "THURSDAY",
+  "FRIDAY",
+  "SATURDAY"
+];
+
+function normalizeTravelDate(value: string) {
+  const match = /^(\d{4})-(\d{2})-(\d{2})$/.exec(value);
+  const date = match
+    ? new Date(Date.UTC(Number(match[1]), Number(match[2]) - 1, Number(match[3])))
+    : new Date(value);
+
+  if (Number.isNaN(date.getTime())) {
+    throw new BadRequestException({
+      code: "BOOKING_TRAVEL_DATE_INVALID",
+      message: "Travel date is invalid"
+    });
+  }
+
+  // MVP convention: always-available inventory is keyed by UTC midnight for the ISO YYYY-MM-DD selected by the traveler.
+  return new Date(Date.UTC(date.getUTCFullYear(), date.getUTCMonth(), date.getUTCDate()));
+}
+
+function assertAllowedTravelDay(date: Date, availableDays: Prisma.JsonValue | null) {
+  if (!Array.isArray(availableDays) || availableDays.length === 0) return;
+  const allowed = new Set(
+    availableDays
+      .filter((day): day is string => typeof day === "string")
+      .map((day) => day.toUpperCase())
+  );
+  const weekday = weekdayByIndex[date.getUTCDay()];
+
+  if (!allowed.has(weekday)) {
+    throw new BadRequestException({
+      code: "BOOKING_TRAVEL_DAY_UNAVAILABLE",
+      message: "Selected date is not available for this package option"
+    });
+  }
 }

@@ -4,8 +4,10 @@ import {
   Injectable,
   NotFoundException
 } from "@nestjs/common";
-import { ActivityStatus, Prisma } from "@prisma/client";
+import { ActivityStatus, DestinationType, Prisma } from "@prisma/client";
+import { destinationParentInclude } from "../destinations/destination.util";
 import { PrismaService } from "../prisma.service";
+import { BASE_CURRENCY } from "../common/money.constants";
 import type {
   AdminActivityQueryDto,
   CreateAdminActivityAvailabilityDto,
@@ -19,6 +21,9 @@ import type {
 const adminActivityListInclude = {
   category: true,
   city: true,
+  destination: {
+    include: destinationParentInclude(4)
+  },
   media: {
     orderBy: [{ isCover: "desc" }, { sortOrder: "asc" }],
     take: 1,
@@ -33,6 +38,16 @@ const adminActivityListInclude = {
   pricingTiers: {
     where: { isActive: true },
     orderBy: [{ minTravelers: "asc" }, { maxTravelers: "asc" }]
+  },
+  options: {
+    where: { isActive: true },
+    orderBy: [{ sortOrder: "asc" }, { createdAt: "asc" }],
+    include: {
+      pricingTiers: {
+        where: { isActive: true },
+        orderBy: [{ minTravelers: "asc" }, { maxTravelers: "asc" }]
+      }
+    }
   }
 } satisfies Prisma.ActivityInclude;
 
@@ -42,6 +57,9 @@ const adminActivityDetailInclude = {
   },
   category: true,
   city: true,
+  destination: {
+    include: destinationParentInclude(4)
+  },
   media: {
     orderBy: [{ sortOrder: "asc" }, { createdAt: "asc" }],
     include: { file: true }
@@ -63,6 +81,17 @@ const adminActivityDetailInclude = {
   pricingTiers: {
     orderBy: [{ minTravelers: "asc" }, { maxTravelers: "asc" }]
   },
+  options: {
+    orderBy: [{ sortOrder: "asc" }, { createdAt: "asc" }],
+    include: {
+      availability: {
+        orderBy: { startDateTime: "asc" }
+      },
+      pricingTiers: {
+        orderBy: [{ minTravelers: "asc" }, { maxTravelers: "asc" }]
+      }
+    }
+  },
   reviews: {
     orderBy: { createdAt: "desc" },
     take: 20
@@ -78,6 +107,10 @@ export class AdminActivitiesService {
 
     if (query.status) where.status = query.status;
     if (query.cityId) where.cityId = query.cityId;
+    if (query.destinationId) {
+      const destinationIds = await this.getDestinationSubtreeIds(query.destinationId);
+      where.destinationId = { in: destinationIds };
+    }
     if (query.categoryId) where.categoryId = query.categoryId;
     if (query.partnerId) where.partnerId = query.partnerId;
 
@@ -117,8 +150,16 @@ export class AdminActivitiesService {
   async update(id: string, actorUserId: string, dto: UpdateAdminActivityDto) {
     const activity = await this.get(id);
 
-    if (dto.cityId || dto.categoryId) {
-      await this.assertCityAndCategory(dto.cityId ?? activity.cityId, dto.categoryId ?? activity.categoryId);
+    if (dto.cityId || dto.destinationId || dto.categoryId) {
+      const cityId = await this.resolveLegacyCityId(
+        dto.cityId ?? activity.cityId,
+        dto.destinationId ?? activity.destinationId ?? undefined
+      );
+      await this.assertActivityReferences(
+        cityId,
+        dto.categoryId ?? activity.categoryId,
+        dto.destinationId ?? activity.destinationId ?? undefined
+      );
     }
 
     const slug =
@@ -130,7 +171,11 @@ export class AdminActivitiesService {
       where: { id },
       data: {
         categoryId: dto.categoryId,
-        cityId: dto.cityId,
+        cityId:
+          dto.cityId !== undefined || dto.destinationId !== undefined
+            ? await this.resolveLegacyCityId(dto.cityId ?? activity.cityId, dto.destinationId ?? undefined)
+            : undefined,
+        destinationId: dto.destinationId,
         cancellationPolicy:
           dto.cancellationPolicy !== undefined ? normalizeNullable(dto.cancellationPolicy) : undefined,
         description: dto.description?.trim(),
@@ -159,6 +204,12 @@ export class AdminActivitiesService {
   async upsertPricing(id: string, actorUserId: string, dto: UpsertAdminActivityPricingDto) {
     const activity = await this.get(id);
     const isActive = dto.isActive ?? true;
+    if (dto.currency.trim().toUpperCase() !== BASE_CURRENCY) {
+      throw new BadRequestException({
+        code: "ACTIVITY_PRICING_CURRENCY_UNSUPPORTED",
+        message: "Activity pricing must be entered and stored in USD"
+      });
+    }
     if (!dto.priceCents) {
       throw new BadRequestException({
         code: "ACTIVITY_SIMPLE_PRICE_REQUIRED",
@@ -178,7 +229,7 @@ export class AdminActivitiesService {
       return tx.activityPricing.create({
         data: {
           activityId: activity.id,
-          currency: dto.currency.trim().toUpperCase(),
+          currency: BASE_CURRENCY,
           isActive,
           priceCents,
           priceType: dto.priceType?.trim() || "per_person"
@@ -480,13 +531,27 @@ export class AdminActivitiesService {
     }
   }
 
-  private async assertCityAndCategory(cityId: string, categoryId: string) {
-    const [city, category] = await Promise.all([
+  private async assertActivityReferences(
+    cityId: string,
+    categoryId: string,
+    destinationId?: string | null
+  ) {
+    const [city, category, destination] = await Promise.all([
       this.prisma.city.findFirst({ where: { id: cityId, isActive: true }, select: { id: true } }),
       this.prisma.category.findFirst({
         where: { id: categoryId, isActive: true },
         select: { id: true }
-      })
+      }),
+      destinationId
+        ? this.prisma.destination.findFirst({
+            where: {
+              id: destinationId,
+              isActive: true,
+              type: { in: [DestinationType.REGION, DestinationType.CITY, DestinationType.AREA] }
+            },
+            select: { id: true }
+          })
+        : Promise.resolve(null)
     ]);
 
     if (!city) {
@@ -502,6 +567,88 @@ export class AdminActivitiesService {
         message: "Category is not active or does not exist"
       });
     }
+
+    if (destinationId && !destination) {
+      throw new BadRequestException({
+        code: "DESTINATION_INVALID",
+        message: "Destination is not active, selectable, or does not exist"
+      });
+    }
+  }
+
+  private async resolveLegacyCityId(cityId?: string, destinationId?: string | null) {
+    if (cityId) return cityId;
+
+    if (!destinationId) {
+      throw new BadRequestException({
+        code: "CITY_OR_DESTINATION_REQUIRED",
+        message: "Select a destination before updating this activity"
+      });
+    }
+
+    const destination = await this.prisma.destination.findUnique({
+      where: { id: destinationId },
+      include: destinationParentInclude(4)
+    });
+
+    for (const slug of buildBreadcrumb(destination).map((item) => item.slug).reverse()) {
+      const city = await this.prisma.city.findFirst({
+        where: { slug, isActive: true },
+        select: { id: true }
+      });
+      if (city) return city.id;
+    }
+
+    const fallback = await this.prisma.city.findFirst({
+      where: { isActive: true },
+      orderBy: [{ sortOrder: "asc" }, { name: "asc" }],
+      select: { id: true }
+    });
+
+    if (!fallback) {
+      throw new BadRequestException({
+        code: "LEGACY_CITY_FALLBACK_MISSING",
+        message: "No active legacy city is available for this destination"
+      });
+    }
+
+    return fallback.id;
+  }
+
+  private async getDestinationSubtreeIds(destinationId: string) {
+    const destinations = await this.prisma.destination.findMany({
+      select: {
+        id: true,
+        parentId: true
+      }
+    });
+
+    const destination = destinations.find((item) => item.id === destinationId);
+    if (!destination) {
+      throw new NotFoundException({
+        code: "ADMIN_DESTINATION_NOT_FOUND",
+        message: "Destination was not found"
+      });
+    }
+
+    const childIdsByParentId = new Map<string, string[]>();
+    for (const item of destinations) {
+      if (!item.parentId) continue;
+      childIdsByParentId.set(item.parentId, [...(childIdsByParentId.get(item.parentId) ?? []), item.id]);
+    }
+
+    const visited = new Set<string>();
+    const walk = (currentId: string) => {
+      visited.add(currentId);
+      for (const childId of childIdsByParentId.get(currentId) ?? []) {
+        if (!visited.has(childId)) {
+          walk(childId);
+        }
+      }
+    };
+
+    walk(destinationId);
+    return [...visited];
   }
 
   private async resolveAvailableSlug(value: string, excludeActivityId?: string) {
@@ -605,4 +752,29 @@ function slugify(value: string) {
     .toLowerCase()
     .replace(/[^a-z0-9]+/g, "-")
     .replace(/^-+|-+$/g, "");
+}
+
+function buildBreadcrumb(
+  destination?: {
+    id: string;
+    name: string;
+    slug: string;
+    type: DestinationType;
+    parent?: unknown;
+  } | null
+) {
+  const chain: Array<{ id: string; name: string; slug: string; type: DestinationType }> = [];
+  let current = destination;
+
+  while (current) {
+    chain.unshift({
+      id: current.id,
+      name: current.name,
+      slug: current.slug,
+      type: current.type
+    });
+    current = current.parent as typeof current;
+  }
+
+  return chain;
 }

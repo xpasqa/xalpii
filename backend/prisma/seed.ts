@@ -1,5 +1,7 @@
 import {
   ActivityStatus,
+  AvailabilityMode,
+  DestinationType,
   PartnerStatus,
   PricingMode,
   Prisma,
@@ -31,6 +33,7 @@ type ActivitySeed = {
   title: string;
   slug: string;
   citySlug: string;
+  destinationSlug: string;
   categorySlug: string;
   shortDescription: string;
   description: string;
@@ -52,6 +55,20 @@ type ActivitySeed = {
     durationLabel?: string;
     type?: string;
   }>;
+};
+
+type ActivityOptionSeed = {
+  title: string;
+  slug: string;
+  description?: string;
+  durationLabel?: string;
+  meetingPoint?: string;
+  availabilityMode: AvailabilityMode;
+  availableDays?: string[];
+  dailyCapacity?: number;
+  isDefault?: boolean;
+  sortOrder?: number;
+  tierMultiplier?: number;
 };
 
 const demoPassword = "Password123!";
@@ -151,6 +168,7 @@ const activities: ActivitySeed[] = [
     title: "Ubud Cooking Class & Market Visit",
     slug: "ubud-cooking-class-market-visit",
     citySlug: "bali",
+    destinationSlug: "ubud",
     categorySlug: "food-cooking",
     shortDescription: "Shop a traditional market, visit a local farm, and cook Balinese dishes.",
     description:
@@ -161,8 +179,8 @@ const activities: ActivitySeed[] = [
     importantInfo: "Please share dietary needs before the activity. Comfortable shoes are recommended.",
     ratingAverage: "4.9",
     reviewCount: 1248,
-    currency: "IDR",
-    priceCents: 54000000,
+    currency: "USD",
+    priceCents: 8000,
     coverUrl:
       "https://images.unsplash.com/photo-1556910103-1c02745aae4d?auto=format&fit=crop&w=1400&q=80",
     highlights: [
@@ -184,6 +202,7 @@ const activities: ActivitySeed[] = [
     title: "Mount Batur Sunrise Jeep Adventure",
     slug: "mount-batur-sunrise-jeep-adventure",
     citySlug: "bali",
+    destinationSlug: "kintamani",
     categorySlug: "adventure",
     shortDescription: "Ride by jeep through volcanic landscapes and watch sunrise over Mount Batur.",
     description:
@@ -194,8 +213,8 @@ const activities: ActivitySeed[] = [
     importantInfo: "Bring a light jacket. Sunrise visibility depends on weather conditions.",
     ratingAverage: "4.8",
     reviewCount: 932,
-    currency: "IDR",
-    priceCents: 72000000,
+    currency: "USD",
+    priceCents: 8000,
     coverUrl:
       "https://images.unsplash.com/photo-1500530855697-b586d89ba3ee?auto=format&fit=crop&w=1400&q=80",
     highlights: [
@@ -217,6 +236,7 @@ const activities: ActivitySeed[] = [
     title: "Tokyo Tea Ceremony Experience",
     slug: "tokyo-tea-ceremony-experience",
     citySlug: "tokyo",
+    destinationSlug: "tokyo",
     categorySlug: "cultural-experience",
     shortDescription: "Join a calm tea ceremony session guided by a Tokyo host.",
     description:
@@ -228,7 +248,7 @@ const activities: ActivitySeed[] = [
     ratingAverage: "4.9",
     reviewCount: 812,
     currency: "USD",
-    priceCents: 4800,
+    priceCents: 8000,
     coverUrl:
       "https://images.unsplash.com/photo-1545569341-9eb8b30979d9?auto=format&fit=crop&w=1400&q=80",
     highlights: ["Learn tea ceremony etiquette", "Taste matcha and seasonal sweets", "Small-group cultural setting"],
@@ -244,6 +264,7 @@ const activities: ActivitySeed[] = [
     title: "Asakusa Food Walk",
     slug: "asakusa-food-walk",
     citySlug: "tokyo",
+    destinationSlug: "tokyo",
     categorySlug: "food-cooking",
     shortDescription: "Taste street food and local snacks around historic Asakusa.",
     description:
@@ -255,7 +276,7 @@ const activities: ActivitySeed[] = [
     ratingAverage: "4.7",
     reviewCount: 546,
     currency: "USD",
-    priceCents: 6900,
+    priceCents: 8000,
     coverUrl:
       "https://images.unsplash.com/photo-1503899036084-c55cdd92da26?auto=format&fit=crop&w=1400&q=80",
     highlights: ["Taste local snacks", "Explore Asakusa side streets", "Learn neighborhood context from a guide"],
@@ -272,6 +293,7 @@ const activities: ActivitySeed[] = [
     title: "Paris Hidden Courtyard Walking Tour",
     slug: "paris-hidden-courtyard-walking-tour",
     citySlug: "paris",
+    destinationSlug: "paris",
     categorySlug: "guided-tour",
     shortDescription: "Walk through quieter Paris passages, courtyards, and local stories.",
     description:
@@ -283,7 +305,7 @@ const activities: ActivitySeed[] = [
     ratingAverage: "4.8",
     reviewCount: 421,
     currency: "USD",
-    priceCents: 5900,
+    priceCents: 8000,
     coverUrl:
       "https://images.unsplash.com/photo-1502602898657-3e91760cbb34?auto=format&fit=crop&w=1400&q=80",
     highlights: ["See hidden passages", "Understand Parisian courtyard history", "Small-group walking pace"],
@@ -299,6 +321,7 @@ const activities: ActivitySeed[] = [
     title: "Seine Evening Cruise",
     slug: "seine-evening-cruise",
     citySlug: "paris",
+    destinationSlug: "paris",
     categorySlug: "water-activity",
     shortDescription: "See Paris from the river during a relaxed evening cruise.",
     description:
@@ -310,7 +333,7 @@ const activities: ActivitySeed[] = [
     ratingAverage: "4.6",
     reviewCount: 1004,
     currency: "USD",
-    priceCents: 3200,
+    priceCents: 8000,
     coverUrl:
       "https://images.unsplash.com/photo-1499856871958-5b9627545d1a?auto=format&fit=crop&w=1400&q=80",
     highlights: ["Cruise past major Paris landmarks", "Enjoy evening river views", "Easy meeting point near central Paris"],
@@ -325,6 +348,7 @@ const activities: ActivitySeed[] = [
     title: "Zurich Old Town & Chocolate Walk",
     slug: "zurich-old-town-chocolate-walk",
     citySlug: "zurich",
+    destinationSlug: "zurich",
     categorySlug: "food-cooking",
     shortDescription: "Explore Zurich lanes with chocolate tastings and local context.",
     description:
@@ -336,7 +360,7 @@ const activities: ActivitySeed[] = [
     ratingAverage: "4.8",
     reviewCount: 388,
     currency: "USD",
-    priceCents: 7400,
+    priceCents: 8000,
     coverUrl:
       "https://images.unsplash.com/photo-1561136594-7f68413baa99?auto=format&fit=crop&w=1400&q=80",
     highlights: ["Taste Swiss chocolate", "Walk Zurich old town", "Learn local food and city history"],
@@ -352,6 +376,7 @@ const activities: ActivitySeed[] = [
     title: "Lake Zurich Paddle Experience",
     slug: "lake-zurich-paddle-experience",
     citySlug: "zurich",
+    destinationSlug: "zurich",
     categorySlug: "water-activity",
     shortDescription: "Paddle a calm section of Lake Zurich with a local instructor.",
     description:
@@ -363,7 +388,7 @@ const activities: ActivitySeed[] = [
     ratingAverage: "4.7",
     reviewCount: 214,
     currency: "USD",
-    priceCents: 6200,
+    priceCents: 8000,
     coverUrl:
       "https://images.unsplash.com/photo-1500534314209-a25ddb2bd429?auto=format&fit=crop&w=1400&q=80",
     highlights: ["Paddle Lake Zurich", "Beginner-friendly briefing", "Calm outdoor city escape"],
@@ -468,12 +493,15 @@ async function main() {
     categoryBySlug.set(savedCategory.slug, savedCategory.id);
   }
 
+  const destinationBySlug = await seedDestinations();
+
   for (const activity of activities) {
     const cityId = cityBySlug.get(activity.citySlug);
+    const destinationId = destinationBySlug.get(activity.destinationSlug);
     const categoryId = categoryBySlug.get(activity.categorySlug);
 
-    if (!cityId || !categoryId) {
-      throw new Error(`Missing city or category for activity ${activity.slug}`);
+    if (!cityId || !categoryId || !destinationId) {
+      throw new Error(`Missing city, category, or destination for activity ${activity.slug}`);
     }
 
     const savedActivity = await prisma.activity.upsert({
@@ -481,6 +509,7 @@ async function main() {
       update: {
         partnerId: partner.id,
         cityId,
+        destinationId,
         categoryId,
         title: activity.title,
         shortDescription: activity.shortDescription,
@@ -502,6 +531,7 @@ async function main() {
       create: {
         partnerId: partner.id,
         cityId,
+        destinationId,
         categoryId,
         title: activity.title,
         slug: activity.slug,
@@ -527,6 +557,7 @@ async function main() {
     await prisma.activityPricingTier.deleteMany({ where: { activityId: savedActivity.id } });
     await prisma.activityMedia.deleteMany({ where: { activityId: savedActivity.id } });
     await prisma.activityAvailability.deleteMany({ where: { activityId: savedActivity.id } });
+    await prisma.activityOption.deleteMany({ where: { activityId: savedActivity.id } });
 
     await prisma.activityPricing.create({
       data: {
@@ -539,9 +570,9 @@ async function main() {
     });
 
     await prisma.activityPricingTier.createMany({
-      data: buildPricingTiers(activity.priceCents).map((tier) => ({
+      data: buildPricingTiers().map((tier) => ({
         activityId: savedActivity.id,
-        currency: activity.currency,
+        currency: "USD",
         priceType: "per_person",
         isActive: true,
         ...tier
@@ -558,21 +589,54 @@ async function main() {
       }
     });
 
-    await prisma.activityAvailability.createMany({
-      data: [7, 14, 21].map((dayOffset) => {
-        const startDateTime = new Date();
-        startDateTime.setUTCDate(startDateTime.getUTCDate() + dayOffset);
-        startDateTime.setUTCHours(9, 0, 0, 0);
-
-        return {
+    const optionSeeds = buildOptionSeeds(activity);
+    for (const optionSeed of optionSeeds) {
+      const option = await prisma.activityOption.create({
+        data: {
           activityId: savedActivity.id,
-          startDateTime,
-          capacity: 12,
-          bookedCount: 0,
-          isActive: true
-        };
-      })
-    });
+          availabilityMode: optionSeed.availabilityMode,
+          availableDays: optionSeed.availableDays ?? undefined,
+          dailyCapacity: optionSeed.dailyCapacity,
+          description: optionSeed.description ?? activity.shortDescription,
+          durationLabel: optionSeed.durationLabel ?? activity.durationLabel,
+          isActive: true,
+          isDefault: optionSeed.isDefault ?? false,
+          meetingPoint: optionSeed.meetingPoint ?? activity.meetingPoint,
+          slug: optionSeed.slug,
+          sortOrder: optionSeed.sortOrder ?? 0,
+          title: optionSeed.title
+        }
+      });
+
+      await prisma.activityOptionPricingTier.createMany({
+        data: buildPricingTiers(optionSeed.tierMultiplier ?? 1).map((tier) => ({
+          optionId: option.id,
+          currency: "USD",
+          priceType: "per_person",
+          isActive: true,
+          ...tier
+        }))
+      });
+
+      if (optionSeed.availabilityMode === AvailabilityMode.SCHEDULED_SESSIONS) {
+        await prisma.activityAvailability.createMany({
+          data: [7, 14, 21].map((dayOffset) => {
+            const startDateTime = new Date();
+            startDateTime.setUTCDate(startDateTime.getUTCDate() + dayOffset);
+            startDateTime.setUTCHours(9, 0, 0, 0);
+
+            return {
+              activityId: savedActivity.id,
+              optionId: option.id,
+              startDateTime,
+              capacity: 12,
+              bookedCount: 0,
+              isActive: true
+            };
+          })
+        });
+      }
+    }
   }
 
   await prisma.auditLog.create({
@@ -590,24 +654,156 @@ async function main() {
   });
 }
 
-function buildPricingTiers(baseAdultPriceCents: number) {
-  const ranges = [
-    { minTravelers: 1, maxTravelers: 1, multiplier: 1 },
-    { minTravelers: 2, maxTravelers: 2, multiplier: 0.75 },
-    { minTravelers: 3, maxTravelers: 3, multiplier: 0.65 },
-    { minTravelers: 4, maxTravelers: 4, multiplier: 0.6 },
-    { minTravelers: 5, maxTravelers: 12, multiplier: 0.525 }
+async function seedDestinations() {
+  const destinationBySlug = new Map<string, string>();
+
+  async function upsertDestination(input: {
+    name: string;
+    slug: string;
+    type: DestinationType;
+    parentSlug?: string;
+    countryCode?: string;
+    description?: string;
+    sortOrder?: number;
+  }) {
+    const parentId = input.parentSlug ? destinationBySlug.get(input.parentSlug) : null;
+    if (input.parentSlug && !parentId) {
+      throw new Error(`Missing parent destination ${input.parentSlug} for ${input.slug}`);
+    }
+
+    const saved = await prisma.destination.upsert({
+      where: { slug: input.slug },
+      update: {
+        countryCode: input.countryCode,
+        description: input.description,
+        isActive: true,
+        name: input.name,
+        parentId,
+        sortOrder: input.sortOrder ?? 0,
+        type: input.type
+      },
+      create: {
+        countryCode: input.countryCode,
+        description: input.description,
+        isActive: true,
+        name: input.name,
+        parentId,
+        slug: input.slug,
+        sortOrder: input.sortOrder ?? 0,
+        type: input.type
+      }
+    });
+
+    destinationBySlug.set(saved.slug, saved.id);
+    return saved;
+  }
+
+  await upsertDestination({ name: "Indonesia", slug: "indonesia", type: DestinationType.COUNTRY, countryCode: "ID", sortOrder: 1 });
+  await upsertDestination({ name: "Bali", slug: "bali", type: DestinationType.REGION, parentSlug: "indonesia", description: "Island culture, beaches, rice terraces, and local experiences.", sortOrder: 1 });
+  await upsertDestination({ name: "Ubud", slug: "ubud", type: DestinationType.AREA, parentSlug: "bali", sortOrder: 1 });
+  await upsertDestination({ name: "Kuta", slug: "kuta", type: DestinationType.AREA, parentSlug: "bali", sortOrder: 2 });
+  await upsertDestination({ name: "Canggu", slug: "canggu", type: DestinationType.AREA, parentSlug: "bali", sortOrder: 3 });
+  await upsertDestination({ name: "Seminyak", slug: "seminyak", type: DestinationType.AREA, parentSlug: "bali", sortOrder: 4 });
+  await upsertDestination({ name: "Kintamani", slug: "kintamani", type: DestinationType.AREA, parentSlug: "bali", sortOrder: 5 });
+
+  await upsertDestination({ name: "Japan", slug: "japan", type: DestinationType.COUNTRY, countryCode: "JP", sortOrder: 2 });
+  await upsertDestination({ name: "Tokyo", slug: "tokyo", type: DestinationType.CITY, parentSlug: "japan", sortOrder: 1 });
+
+  await upsertDestination({ name: "France", slug: "france", type: DestinationType.COUNTRY, countryCode: "FR", sortOrder: 3 });
+  await upsertDestination({ name: "Paris", slug: "paris", type: DestinationType.CITY, parentSlug: "france", sortOrder: 1 });
+
+  await upsertDestination({ name: "Switzerland", slug: "switzerland", type: DestinationType.COUNTRY, countryCode: "CH", sortOrder: 4 });
+  await upsertDestination({ name: "Zurich", slug: "zurich", type: DestinationType.CITY, parentSlug: "switzerland", sortOrder: 1 });
+  await upsertDestination({ name: "Interlaken", slug: "interlaken", type: DestinationType.CITY, parentSlug: "switzerland", sortOrder: 2 });
+
+  await upsertDestination({ name: "United Arab Emirates", slug: "united-arab-emirates", type: DestinationType.COUNTRY, countryCode: "AE", sortOrder: 5 });
+  await upsertDestination({ name: "Dubai", slug: "dubai", type: DestinationType.CITY, parentSlug: "united-arab-emirates", sortOrder: 1 });
+
+  await upsertDestination({ name: "South Africa", slug: "south-africa", type: DestinationType.COUNTRY, countryCode: "ZA", sortOrder: 6 });
+  await upsertDestination({ name: "Cape Town", slug: "cape-town", type: DestinationType.CITY, parentSlug: "south-africa", sortOrder: 1 });
+
+  return destinationBySlug;
+}
+
+function buildOptionSeeds(activity: ActivitySeed): ActivityOptionSeed[] {
+  if (activity.slug === "mount-batur-sunrise-jeep-adventure") {
+    return [
+      {
+        title: "Guide only",
+        slug: "guide-only",
+        availabilityMode: AvailabilityMode.SCHEDULED_SESSIONS,
+        isDefault: true,
+        sortOrder: 0,
+        tierMultiplier: 0.85
+      },
+      {
+        title: "Guide + breakfast",
+        slug: "guide-breakfast",
+        availabilityMode: AvailabilityMode.SCHEDULED_SESSIONS,
+        sortOrder: 1,
+        tierMultiplier: 1
+      },
+      {
+        title: "Private guide + breakfast",
+        slug: "private-guide-breakfast",
+        availabilityMode: AvailabilityMode.ALWAYS_AVAILABLE,
+        availableDays: ["MONDAY", "TUESDAY", "WEDNESDAY", "THURSDAY", "FRIDAY", "SATURDAY", "SUNDAY"],
+        dailyCapacity: 10,
+        sortOrder: 2,
+        tierMultiplier: 1.45
+      }
+    ];
+  }
+
+  if (activity.slug === "ubud-cooking-class-market-visit") {
+    return [
+      {
+        title: "Standard experience",
+        slug: "standard-experience",
+        availabilityMode: AvailabilityMode.ALWAYS_AVAILABLE,
+        availableDays: ["MONDAY", "TUESDAY", "WEDNESDAY", "THURSDAY", "FRIDAY", "SATURDAY", "SUNDAY"],
+        dailyCapacity: 12,
+        isDefault: true,
+        sortOrder: 0
+      },
+      {
+        title: "Private family kitchen",
+        slug: "private-family-kitchen",
+        availabilityMode: AvailabilityMode.ALWAYS_AVAILABLE,
+        availableDays: ["MONDAY", "WEDNESDAY", "FRIDAY", "SATURDAY"],
+        dailyCapacity: 8,
+        sortOrder: 1,
+        tierMultiplier: 1.35
+      }
+    ];
+  }
+
+  return [
+    {
+      title: "Standard experience",
+      slug: "standard-experience",
+      availabilityMode: AvailabilityMode.SCHEDULED_SESSIONS,
+      isDefault: true,
+      sortOrder: 0
+    }
+  ];
+}
+
+function buildPricingTiers(multiplier = 1) {
+  const tiers = [
+    { minTravelers: 1, maxTravelers: 1, adultPriceCents: 8000, childPriceCents: 5840 },
+    { minTravelers: 2, maxTravelers: 2, adultPriceCents: 6000, childPriceCents: 4380 },
+    { minTravelers: 3, maxTravelers: 3, adultPriceCents: 5200, childPriceCents: 3796 },
+    { minTravelers: 4, maxTravelers: 4, adultPriceCents: 4800, childPriceCents: 3504 },
+    { minTravelers: 5, maxTravelers: 12, adultPriceCents: 4200, childPriceCents: 3066 }
   ];
 
-  return ranges.map(({ multiplier, ...range }) => {
-    const adultPriceCents = Math.max(1, Math.round(baseAdultPriceCents * multiplier));
-    return {
-      ...range,
-      adultPriceCents,
-      childPriceCents: Math.round(adultPriceCents * 0.73),
-      childDiscountPercent: new Prisma.Decimal(27)
-    };
-  });
+  return tiers.map((tier) => ({
+    ...tier,
+    adultPriceCents: Math.round(tier.adultPriceCents * multiplier),
+    childPriceCents: Math.round(tier.childPriceCents * multiplier),
+    childDiscountPercent: new Prisma.Decimal(27)
+  }));
 }
 
 main()

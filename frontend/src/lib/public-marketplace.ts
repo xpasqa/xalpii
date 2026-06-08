@@ -15,6 +15,21 @@ type PublicCity = {
     url?: string | null;
   } | null;
   activityCount?: number;
+  destination?: PublicDestination | null;
+};
+
+type PublicDestination = {
+  id: string;
+  name: string;
+  slug: string;
+  type: "COUNTRY" | "REGION" | "CITY" | "AREA";
+  breadcrumb?: Array<{
+    id: string;
+    name: string;
+    slug: string;
+    type: "COUNTRY" | "REGION" | "CITY" | "AREA";
+  }>;
+  breadcrumbLabel?: string;
 };
 
 type PublicActivityMedia = {
@@ -38,11 +53,29 @@ type PublicActivityPricing = {
 
 type PublicActivityAvailability = {
   id: string;
+  optionId?: string | null;
   startDateTime: string;
   endDateTime?: string | null;
   capacity?: number | null;
   bookedCount: number;
   isActive: boolean;
+};
+
+export type PublicActivityOption = {
+  id: string;
+  title: string;
+  slug: string;
+  description?: string | null;
+  durationLabel?: string | null;
+  meetingPoint?: string | null;
+  availabilityMode: "SCHEDULED_SESSIONS" | "ALWAYS_AVAILABLE";
+  availableDays?: string[] | null;
+  dailyCapacity?: number | null;
+  isDefault: boolean;
+  isActive: boolean;
+  sortOrder: number;
+  pricingTiers: ActivityPricingTier[];
+  availability: PublicActivityAvailability[];
 };
 
 export type PublicActivity = {
@@ -62,9 +95,13 @@ export type PublicActivity = {
   ratingAverage: string | number;
   reviewCount: number;
   pricingMode?: PricingMode;
+  baseCurrency?: "USD";
   pricingTiers?: ActivityPricingTier[];
+  options?: PublicActivityOption[];
   fromPriceCents?: number | null;
+  fromPriceMinorUsd?: number | null;
   city: PublicCity;
+  destination?: PublicDestination | null;
   category: {
     id: string;
     name: string;
@@ -105,12 +142,13 @@ export async function getPublicActivity(slug: string) {
 
 export function mapPublicCity(city: PublicCity): TravelCity {
   const imageUrl = city.imageFile?.url ?? cityImageBySlug[city.slug] ?? placeholderImage;
+  const country = city.destination?.breadcrumb?.[0]?.name ?? city.country;
 
   return {
     slug: city.slug,
     name: city.name,
-    country: city.country,
-    region: regionByCountry[city.country] ?? "Curated destination",
+    country,
+    region: city.destination?.breadcrumbLabel ?? regionByCountry[country] ?? "Curated destination",
     description:
       city.description ??
       `Discover handpicked local experiences and practical trip details in ${city.name}.`,
@@ -128,6 +166,9 @@ export function mapPublicActivity(activity: PublicActivity): TravelActivity {
   const gallery = galleryImages(activity, cover);
   const pricing = primaryPricing(activity);
   const importantInfo = toStringList(activity.importantInfo);
+  const destinationLabel = activity.destination?.breadcrumbLabel;
+  const leafDestination = activity.destination?.name ?? activity.city.name;
+  const country = activity.destination?.breadcrumb?.[0]?.name ?? activity.city.country;
 
   return {
     id: activity.id,
@@ -135,19 +176,25 @@ export function mapPublicActivity(activity: PublicActivity): TravelActivity {
     title: activity.title,
     category: activity.category.name,
     citySlug: activity.city.slug,
-    city: activity.city.name,
-    country: activity.city.country,
-    location: `${activity.city.name}, ${activity.city.country}`,
+    city: leafDestination,
+    country,
+    location: destinationLabel ?? `${activity.city.name}, ${activity.city.country}`,
     imageUrl: cover,
     gallery,
     duration: activity.durationLabel ?? "Duration varies",
     rating: Number(activity.ratingAverage || 0),
     reviewCount: activity.reviewCount ?? 0,
-    price: activity.fromPriceCents ?? pricing?.priceCents ?? 0,
-    currency: pricing?.currency ?? "IDR",
+    price: activity.fromPriceMinorUsd ?? activity.fromPriceCents ?? pricing?.priceCents ?? 0,
+    currency: "USD",
     pricingMode: activity.pricingMode ?? "SIMPLE",
     pricingTiers: activity.pricingTiers ?? [],
     availability: activity.availability ?? [],
+    options: (activity.options ?? []).map((option) => ({
+      ...option,
+      availableDays: Array.isArray(option.availableDays) ? option.availableDays : [],
+      availability: option.availability ?? [],
+      pricingTiers: option.pricingTiers ?? []
+    })),
     badge: activity.reviewCount > 100 ? "Top rated" : undefined,
     badgeLabel: activity.reviewCount > 100 ? "Popular choice" : "Curated by Alpii",
     providerName: activity.partner?.businessName ?? "Curated by Alpii",
@@ -156,7 +203,7 @@ export function mapPublicActivity(activity: PublicActivity): TravelActivity {
     fullDescription: splitParagraphs(activity.description),
     highlights: toStringList(activity.highlights, [
       activity.shortDescription,
-      `Explore ${activity.city.name} with trusted local context`
+      `Explore ${leafDestination} with trusted local context`
     ]),
     included: toStringList(activity.included, ["Activity host", "Curated experience"]),
     includes: toStringList(activity.included, ["Activity host", "Curated experience"]),

@@ -10,6 +10,8 @@ type CheckoutPageProps = {
     availabilityId?: string;
     adults?: string;
     children?: string;
+    optionId?: string;
+    selectedDate?: string;
   }>;
 };
 
@@ -24,6 +26,8 @@ export default async function CheckoutPage({ params, searchParams }: CheckoutPag
         initialAdults={selection.adults}
         initialAvailabilityId={selection.availabilityId}
         initialChildren={selection.children}
+        initialOptionId={selection.optionId}
+        initialSelectedDate={selection.selectedDate}
       />
       <SiteFooter />
     </PublicShell>

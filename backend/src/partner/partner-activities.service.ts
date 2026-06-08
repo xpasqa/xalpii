@@ -5,16 +5,28 @@ import {
   Injectable,
   NotFoundException
 } from "@nestjs/common";
-import { ActivityStatus, PricingMode, Prisma } from "@prisma/client";
+import {
+  ActivityRevisionStatus,
+  ActivityStatus,
+  AvailabilityMode,
+  DestinationType,
+  PricingMode,
+  Prisma
+} from "@prisma/client";
+import { destinationParentInclude } from "../destinations/destination.util";
 import { PrismaService } from "../prisma.service";
+import { BASE_CURRENCY } from "../common/money.constants";
 import type {
   CreatePartnerActivityAvailabilityDto,
   CreatePartnerActivityDto,
   CreatePartnerActivityMediaDto,
+  CreatePartnerActivityOptionDto,
   PartnerActivityQueryDto,
   UpdatePartnerActivityAvailabilityDto,
   UpdatePartnerActivityDto,
   UpdatePartnerActivityMediaDto,
+  UpdatePartnerActivityOptionDto,
+  UpsertPartnerActivityOptionPricingDto,
   UpsertPartnerActivityPricingDto
 } from "./dto/partner-activity.dto";
 
@@ -22,6 +34,12 @@ const editableStatuses = new Set<ActivityStatus>([
   ActivityStatus.DRAFT,
   ActivityStatus.REVISION_REQUESTED
 ]);
+
+const activeRevisionStatuses = [
+  ActivityRevisionStatus.DRAFT,
+  ActivityRevisionStatus.PENDING_REVIEW,
+  ActivityRevisionStatus.REJECTED
+];
 
 const activityDetailInclude = {
   availability: {
@@ -31,6 +49,9 @@ const activityDetailInclude = {
   },
   category: true,
   city: true,
+  destination: {
+    include: destinationParentInclude(4)
+  },
   media: {
     orderBy: [{ sortOrder: "asc" }, { createdAt: "asc" }]
   },
@@ -41,8 +62,43 @@ const activityDetailInclude = {
   },
   pricingTiers: {
     orderBy: [{ minTravelers: "asc" }, { maxTravelers: "asc" }]
+  },
+  options: {
+    orderBy: [{ sortOrder: "asc" }, { createdAt: "asc" }],
+    include: {
+      availability: {
+        orderBy: {
+          startDateTime: "asc"
+        }
+      },
+      pricingTiers: {
+        orderBy: [{ minTravelers: "asc" }, { maxTravelers: "asc" }]
+      }
+    }
+  },
+  revisions: {
+    where: {
+      status: {
+        in: activeRevisionStatuses
+      }
+    },
+    orderBy: {
+      updatedAt: "desc"
+    },
+    take: 1
   }
 } satisfies Prisma.ActivityInclude;
+
+const optionDetailInclude = {
+  availability: {
+    orderBy: {
+      startDateTime: "asc"
+    }
+  },
+  pricingTiers: {
+    orderBy: [{ minTravelers: "asc" }, { maxTravelers: "asc" }]
+  }
+} satisfies Prisma.ActivityOptionInclude;
 
 @Injectable()
 export class PartnerActivitiesService {
@@ -72,6 +128,9 @@ export class PartnerActivitiesService {
       include: {
         category: true,
         city: true,
+        destination: {
+          include: destinationParentInclude(4)
+        },
         media: {
           orderBy: [{ isCover: "desc" }, { sortOrder: "asc" }],
           take: 1
@@ -84,6 +143,27 @@ export class PartnerActivitiesService {
         pricingTiers: {
           where: { isActive: true },
           orderBy: [{ minTravelers: "asc" }, { maxTravelers: "asc" }]
+        },
+        options: {
+          where: { isActive: true },
+          orderBy: [{ sortOrder: "asc" }, { createdAt: "asc" }],
+          include: {
+            pricingTiers: {
+              where: { isActive: true },
+              orderBy: [{ minTravelers: "asc" }, { maxTravelers: "asc" }]
+            }
+          }
+        },
+        revisions: {
+          where: {
+            status: {
+              in: activeRevisionStatuses
+            }
+          },
+          orderBy: {
+            updatedAt: "desc"
+          },
+          take: 1
         }
       },
       orderBy: {
@@ -99,13 +179,15 @@ export class PartnerActivitiesService {
 
   async create(userId: string, dto: CreatePartnerActivityDto) {
     const partner = await this.getPartnerForUser(userId);
-    await this.assertCityAndCategory(dto.cityId, dto.categoryId);
+    const cityId = await this.resolveLegacyCityId(dto.cityId, dto.destinationId);
+    await this.assertActivityReferences(cityId, dto.categoryId, dto.destinationId);
 
     const slug = await this.resolveAvailableSlug(dto.slug ?? dto.title);
     const activity = await this.prisma.activity.create({
       data: {
         categoryId: dto.categoryId,
-        cityId: dto.cityId,
+        cityId,
+        destinationId: dto.destinationId,
         cancellationPolicy: normalizeNullable(dto.cancellationPolicy),
         description: dto.description.trim(),
         durationLabel: normalizeNullable(dto.durationLabel),
@@ -133,8 +215,16 @@ export class PartnerActivitiesService {
     const activity = await this.getOwnedActivity(partner.id, activityId);
     this.assertEditable(activity.status);
 
-    if (dto.cityId || dto.categoryId) {
-      await this.assertCityAndCategory(dto.cityId ?? activity.cityId, dto.categoryId ?? activity.categoryId);
+    if (dto.cityId || dto.destinationId || dto.categoryId) {
+      const cityId = await this.resolveLegacyCityId(
+        dto.cityId ?? activity.cityId,
+        dto.destinationId ?? activity.destinationId ?? undefined
+      );
+      await this.assertActivityReferences(
+        cityId,
+        dto.categoryId ?? activity.categoryId,
+        dto.destinationId ?? activity.destinationId ?? undefined
+      );
     }
 
     const slug =
@@ -146,7 +236,11 @@ export class PartnerActivitiesService {
       where: { id: activity.id },
       data: {
         categoryId: dto.categoryId,
-        cityId: dto.cityId,
+        cityId:
+          dto.cityId !== undefined || dto.destinationId !== undefined
+            ? await this.resolveLegacyCityId(dto.cityId ?? activity.cityId, dto.destinationId ?? undefined)
+            : undefined,
+        destinationId: dto.destinationId,
         cancellationPolicy:
           dto.cancellationPolicy !== undefined ? normalizeNullable(dto.cancellationPolicy) : undefined,
         description: dto.description?.trim(),
@@ -198,7 +292,14 @@ export class PartnerActivitiesService {
     this.assertEditable(activity.status);
 
     const pricingMode = dto.pricingMode ?? PricingMode.SIMPLE;
-    const currency = dto.currency.trim().toUpperCase();
+    const requestedCurrency = dto.currency.trim().toUpperCase();
+    if (requestedCurrency !== BASE_CURRENCY) {
+      throw new BadRequestException({
+        code: "ACTIVITY_PRICING_CURRENCY_UNSUPPORTED",
+        message: "Partner pricing must be entered and stored in USD"
+      });
+    }
+    const currency = BASE_CURRENCY;
     const priceType = dto.priceType?.trim() || "per_person";
     const isActive = dto.isActive ?? true;
     const tiers =
@@ -270,6 +371,251 @@ export class PartnerActivitiesService {
       pricing: activity.pricing,
       pricingTiers: activity.pricingTiers
     };
+  }
+
+  async listOptions(userId: string, activityId: string) {
+    const partner = await this.getPartnerForUser(userId);
+    const activity = await this.getOwnedActivity(partner.id, activityId);
+
+    return this.prisma.activityOption.findMany({
+      where: { activityId: activity.id },
+      include: optionDetailInclude,
+      orderBy: [{ sortOrder: "asc" }, { createdAt: "asc" }]
+    });
+  }
+
+  async createOption(userId: string, activityId: string, dto: CreatePartnerActivityOptionDto) {
+    const partner = await this.getPartnerForUser(userId);
+    const activity = await this.getOwnedActivity(partner.id, activityId);
+    this.assertEditable(activity.status);
+
+    const slug = await this.resolveAvailableOptionSlug(activity.id, dto.slug ?? dto.title);
+    const option = await this.prisma.activityOption.create({
+      data: {
+        activityId: activity.id,
+        availabilityMode: dto.availabilityMode ?? AvailabilityMode.SCHEDULED_SESSIONS,
+        availableDays: normalizeAvailableDays(dto.availableDays),
+        dailyCapacity: dto.dailyCapacity,
+        description: normalizeNullable(dto.description),
+        durationLabel: normalizeNullable(dto.durationLabel),
+        isActive: dto.isActive ?? true,
+        meetingPoint: normalizeNullable(dto.meetingPoint),
+        slug,
+        sortOrder: dto.sortOrder ?? 0,
+        title: dto.title.trim()
+      },
+      include: optionDetailInclude
+    });
+
+    await this.audit(userId, "ACTIVITY_OPTION_CREATED", activity.id, { optionId: option.id });
+    return option;
+  }
+
+  async getOption(userId: string, activityId: string, optionId: string) {
+    const partner = await this.getPartnerForUser(userId);
+    const activity = await this.getOwnedActivity(partner.id, activityId);
+    return this.getOwnedOption(activity.id, optionId);
+  }
+
+  async updateOption(
+    userId: string,
+    activityId: string,
+    optionId: string,
+    dto: UpdatePartnerActivityOptionDto
+  ) {
+    const partner = await this.getPartnerForUser(userId);
+    const activity = await this.getOwnedActivity(partner.id, activityId);
+    this.assertEditable(activity.status);
+    const option = await this.getOwnedOption(activity.id, optionId);
+    const slug =
+      dto.slug !== undefined || dto.title !== undefined
+        ? await this.resolveAvailableOptionSlug(activity.id, dto.slug ?? dto.title ?? option.title, option.id)
+        : undefined;
+
+    const updated = await this.prisma.activityOption.update({
+      where: { id: option.id },
+      data: {
+        availabilityMode: dto.availabilityMode,
+        availableDays:
+          dto.availableDays !== undefined ? normalizeAvailableDays(dto.availableDays) : undefined,
+        dailyCapacity: dto.dailyCapacity,
+        description: dto.description !== undefined ? normalizeNullable(dto.description) : undefined,
+        durationLabel:
+          dto.durationLabel !== undefined ? normalizeNullable(dto.durationLabel) : undefined,
+        isActive: dto.isActive,
+        meetingPoint:
+          dto.meetingPoint !== undefined ? normalizeNullable(dto.meetingPoint) : undefined,
+        slug,
+        sortOrder: dto.sortOrder,
+        title: dto.title?.trim()
+      },
+      include: optionDetailInclude
+    });
+
+    await this.audit(userId, "ACTIVITY_OPTION_UPDATED", activity.id, { optionId: option.id });
+    return updated;
+  }
+
+  async deactivateOption(userId: string, activityId: string, optionId: string) {
+    const partner = await this.getPartnerForUser(userId);
+    const activity = await this.getOwnedActivity(partner.id, activityId);
+    this.assertEditable(activity.status);
+    await this.getOwnedOption(activity.id, optionId);
+
+    const updated = await this.prisma.activityOption.update({
+      where: { id: optionId },
+      data: { isActive: false },
+      include: optionDetailInclude
+    });
+    await this.audit(userId, "ACTIVITY_OPTION_DEACTIVATED", activity.id, { optionId });
+    return updated;
+  }
+
+  async getOptionPricing(userId: string, activityId: string, optionId: string) {
+    const partner = await this.getPartnerForUser(userId);
+    const activity = await this.getOwnedActivity(partner.id, activityId);
+    const option = await this.getOwnedOption(activity.id, optionId);
+
+    return {
+      currency: BASE_CURRENCY,
+      pricingTiers: option.pricingTiers
+    };
+  }
+
+  async upsertOptionPricing(
+    userId: string,
+    activityId: string,
+    optionId: string,
+    dto: UpsertPartnerActivityOptionPricingDto
+  ) {
+    const partner = await this.getPartnerForUser(userId);
+    const activity = await this.getOwnedActivity(partner.id, activityId);
+    this.assertEditable(activity.status);
+    const option = await this.getOwnedOption(activity.id, optionId);
+    const requestedCurrency = dto.currency.trim().toUpperCase();
+    if (requestedCurrency !== BASE_CURRENCY) {
+      throw new BadRequestException({
+        code: "ACTIVITY_OPTION_PRICING_CURRENCY_UNSUPPORTED",
+        message: "Option pricing must be entered and stored in USD"
+      });
+    }
+
+    const tiers = normalizePricingTiers(dto.tiers, BASE_CURRENCY, dto.priceType?.trim() || "per_person");
+    await this.prisma.$transaction(async (tx) => {
+      await tx.activityOptionPricingTier.deleteMany({ where: { optionId: option.id } });
+      await tx.activityOptionPricingTier.createMany({
+        data: tiers.map((tier) => ({
+          ...tier,
+          optionId: option.id
+        }))
+      });
+
+      const summaryPrice = Math.min(
+        ...tiers.filter((tier) => tier.isActive).map((tier) => tier.adultPriceCents)
+      );
+      await tx.activity.update({
+        where: { id: activity.id },
+        data: { pricingMode: PricingMode.GROUP_TIER }
+      });
+      await tx.activityPricing.updateMany({
+        where: { activityId: activity.id },
+        data: { isActive: false }
+      });
+      await tx.activityPricing.create({
+        data: {
+          activityId: activity.id,
+          currency: BASE_CURRENCY,
+          isActive: true,
+          priceCents: summaryPrice,
+          priceType: tiers[0]?.priceType ?? "per_person"
+        }
+      });
+    });
+
+    await this.audit(userId, "ACTIVITY_OPTION_PRICING_UPDATED", activity.id, {
+      optionId: option.id,
+      tierCount: tiers.length
+    });
+    return this.getOptionPricing(userId, activity.id, option.id);
+  }
+
+  async listOptionAvailability(userId: string, activityId: string, optionId: string) {
+    const partner = await this.getPartnerForUser(userId);
+    const activity = await this.getOwnedActivity(partner.id, activityId);
+    const option = await this.getOwnedOption(activity.id, optionId);
+
+    return this.prisma.activityAvailability.findMany({
+      where: { activityId: activity.id, optionId: option.id },
+      orderBy: { startDateTime: "asc" }
+    });
+  }
+
+  async createOptionAvailability(
+    userId: string,
+    activityId: string,
+    optionId: string,
+    dto: CreatePartnerActivityAvailabilityDto
+  ) {
+    const partner = await this.getPartnerForUser(userId);
+    const activity = await this.getOwnedActivity(partner.id, activityId);
+    this.assertEditable(activity.status);
+    const option = await this.getOwnedOption(activity.id, optionId);
+    this.assertScheduledOption(option.availabilityMode);
+
+    return this.prisma.activityAvailability.create({
+      data: {
+        activityId: activity.id,
+        optionId: option.id,
+        capacity: dto.capacity,
+        endDateTime: dto.endDateTime ? new Date(dto.endDateTime) : null,
+        isActive: dto.isActive ?? true,
+        startDateTime: new Date(dto.startDateTime)
+      }
+    });
+  }
+
+  async updateOptionAvailability(
+    userId: string,
+    activityId: string,
+    optionId: string,
+    availabilityId: string,
+    dto: UpdatePartnerActivityAvailabilityDto
+  ) {
+    const partner = await this.getPartnerForUser(userId);
+    const activity = await this.getOwnedActivity(partner.id, activityId);
+    this.assertEditable(activity.status);
+    const option = await this.getOwnedOption(activity.id, optionId);
+    this.assertScheduledOption(option.availabilityMode);
+    await this.getOwnedAvailability(activity.id, availabilityId, option.id);
+
+    return this.prisma.activityAvailability.update({
+      where: { id: availabilityId },
+      data: {
+        capacity: dto.capacity,
+        endDateTime: dto.endDateTime !== undefined ? new Date(dto.endDateTime) : undefined,
+        isActive: dto.isActive,
+        startDateTime:
+          dto.startDateTime !== undefined ? new Date(dto.startDateTime) : undefined
+      }
+    });
+  }
+
+  async deactivateOptionAvailability(
+    userId: string,
+    activityId: string,
+    optionId: string,
+    availabilityId: string
+  ) {
+    const partner = await this.getPartnerForUser(userId);
+    const activity = await this.getOwnedActivity(partner.id, activityId);
+    this.assertEditable(activity.status);
+    const option = await this.getOwnedOption(activity.id, optionId);
+    await this.getOwnedAvailability(activity.id, availabilityId, option.id);
+
+    return this.prisma.activityAvailability.update({
+      where: { id: availabilityId },
+      data: { isActive: false }
+    });
   }
 
   async listAvailability(userId: string, activityId: string) {
@@ -454,6 +800,24 @@ export class PartnerActivitiesService {
     });
   }
 
+  async listActiveDestinations() {
+    const destinations = await this.prisma.destination.findMany({
+      where: {
+        isActive: true,
+        type: {
+          in: [DestinationType.REGION, DestinationType.CITY, DestinationType.AREA]
+        }
+      },
+      include: destinationParentInclude(4),
+      orderBy: [{ sortOrder: "asc" }, { name: "asc" }]
+    });
+
+    return destinations.map((destination) => ({
+      ...destination,
+      breadcrumb: buildBreadcrumb(destination)
+    }));
+  }
+
   private async getPartnerForUser(userId: string) {
     const partner = await this.prisma.partner.findUnique({
       where: { userId }
@@ -488,9 +852,25 @@ export class PartnerActivitiesService {
     return activity;
   }
 
-  private async getOwnedAvailability(activityId: string, availabilityId: string) {
+  private async getOwnedOption(activityId: string, optionId: string) {
+    const option = await this.prisma.activityOption.findFirst({
+      where: { activityId, id: optionId },
+      include: optionDetailInclude
+    });
+
+    if (!option) {
+      throw new NotFoundException({
+        code: "ACTIVITY_OPTION_NOT_FOUND",
+        message: "Activity option was not found"
+      });
+    }
+
+    return option;
+  }
+
+  private async getOwnedAvailability(activityId: string, availabilityId: string, optionId?: string) {
     const availability = await this.prisma.activityAvailability.findFirst({
-      where: { activityId, id: availabilityId }
+      where: { activityId, id: availabilityId, ...(optionId ? { optionId } : {}) }
     });
 
     if (!availability) {
@@ -527,11 +907,24 @@ export class PartnerActivitiesService {
     }
   }
 
+  private assertScheduledOption(availabilityMode: AvailabilityMode) {
+    if (availabilityMode !== AvailabilityMode.SCHEDULED_SESSIONS) {
+      throw new BadRequestException({
+        code: "ACTIVITY_OPTION_SESSION_NOT_ALLOWED",
+        message: "Scheduled sessions can only be managed for scheduled-session options"
+      });
+    }
+  }
+
   private assertSubmittable(activity: Awaited<ReturnType<typeof this.getOwnedActivity>>) {
+    const hasOptionPricing = activity.options.some(
+      (option) => option.isActive && option.pricingTiers.some((tier) => tier.isActive)
+    );
     const hasPricing =
-      activity.pricing.some((price) => price.isActive) &&
-      (activity.pricingMode !== PricingMode.GROUP_TIER ||
-        activity.pricingTiers.some((tier) => tier.isActive));
+      hasOptionPricing ||
+      (activity.pricing.some((price) => price.isActive) &&
+        (activity.pricingMode !== PricingMode.GROUP_TIER ||
+          activity.pricingTiers.some((tier) => tier.isActive)));
     const missing: string[] = [];
 
     if (!activity.title.trim()) missing.push("title");
@@ -550,13 +943,27 @@ export class PartnerActivitiesService {
     }
   }
 
-  private async assertCityAndCategory(cityId: string, categoryId: string) {
-    const [city, category] = await Promise.all([
+  private async assertActivityReferences(
+    cityId: string,
+    categoryId: string,
+    destinationId?: string | null
+  ) {
+    const [city, category, destination] = await Promise.all([
       this.prisma.city.findFirst({ where: { id: cityId, isActive: true }, select: { id: true } }),
       this.prisma.category.findFirst({
         where: { id: categoryId, isActive: true },
         select: { id: true }
-      })
+      }),
+      destinationId
+        ? this.prisma.destination.findFirst({
+            where: {
+              id: destinationId,
+              isActive: true,
+              type: { in: [DestinationType.REGION, DestinationType.CITY, DestinationType.AREA] }
+            },
+            select: { id: true }
+          })
+        : Promise.resolve(null)
     ]);
 
     if (!city) {
@@ -572,6 +979,52 @@ export class PartnerActivitiesService {
         message: "Category is not active or does not exist"
       });
     }
+
+    if (destinationId && !destination) {
+      throw new BadRequestException({
+        code: "DESTINATION_INVALID",
+        message: "Destination is not active, selectable, or does not exist"
+      });
+    }
+  }
+
+  private async resolveLegacyCityId(cityId?: string, destinationId?: string | null) {
+    if (cityId) return cityId;
+
+    if (!destinationId) {
+      throw new BadRequestException({
+        code: "CITY_OR_DESTINATION_REQUIRED",
+        message: "Select a destination before creating an activity"
+      });
+    }
+
+    const destination = await this.prisma.destination.findUnique({
+      where: { id: destinationId },
+      include: destinationParentInclude(4)
+    });
+
+    for (const slug of buildBreadcrumb(destination).map((item) => item.slug).reverse()) {
+      const city = await this.prisma.city.findFirst({
+        where: { slug, isActive: true },
+        select: { id: true }
+      });
+      if (city) return city.id;
+    }
+
+    const fallback = await this.prisma.city.findFirst({
+      where: { isActive: true },
+      orderBy: [{ sortOrder: "asc" }, { name: "asc" }],
+      select: { id: true }
+    });
+
+    if (!fallback) {
+      throw new BadRequestException({
+        code: "LEGACY_CITY_FALLBACK_MISSING",
+        message: "No active legacy city is available for this destination"
+      });
+    }
+
+    return fallback.id;
   }
 
   private async resolveAvailableSlug(value: string, excludeActivityId?: string) {
@@ -596,6 +1049,35 @@ export class PartnerActivitiesService {
       throw new ConflictException({
         code: "ACTIVITY_SLUG_TAKEN",
         message: "Activity slug is already used"
+      });
+    }
+
+    return slug;
+  }
+
+  private async resolveAvailableOptionSlug(activityId: string, value: string, excludeOptionId?: string) {
+    const slug = slugify(value);
+
+    if (!slug) {
+      throw new BadRequestException({
+        code: "ACTIVITY_OPTION_SLUG_REQUIRED",
+        message: "Activity option slug could not be generated"
+      });
+    }
+
+    const existing = await this.prisma.activityOption.findFirst({
+      where: {
+        activityId,
+        slug,
+        ...(excludeOptionId ? { id: { not: excludeOptionId } } : {})
+      },
+      select: { id: true }
+    });
+
+    if (existing) {
+      throw new ConflictException({
+        code: "ACTIVITY_OPTION_SLUG_TAKEN",
+        message: "Activity option slug is already used for this activity"
       });
     }
 
@@ -639,6 +1121,32 @@ function normalizeJson(value: unknown) {
   return value as Prisma.InputJsonValue;
 }
 
+const validWeekdays = new Set([
+  "MONDAY",
+  "TUESDAY",
+  "WEDNESDAY",
+  "THURSDAY",
+  "FRIDAY",
+  "SATURDAY",
+  "SUNDAY"
+]);
+
+function normalizeAvailableDays(value?: string[]) {
+  if (value === undefined) return undefined;
+  const days = [...new Set(value.map((day) => day.trim().toUpperCase()))].filter(Boolean);
+  const invalid = days.filter((day) => !validWeekdays.has(day));
+
+  if (invalid.length) {
+    throw new BadRequestException({
+      code: "ACTIVITY_OPTION_AVAILABLE_DAYS_INVALID",
+      message: "Available days must be weekday names",
+      details: { invalid }
+    });
+  }
+
+  return days as Prisma.InputJsonValue;
+}
+
 function normalizePricingTiers(
   tiers: NonNullable<UpsertPartnerActivityPricingDto["tiers"]>,
   currency: string,
@@ -654,11 +1162,13 @@ function normalizePricingTiers(
   const normalized = tiers
     .map((tier) => {
       const discount = tier.childDiscountPercent ?? 27;
+      const childAllowed = tier.childAllowed ?? true;
       return {
         adultPriceCents: tier.adultPriceCents,
-        childDiscountPercent: new Prisma.Decimal(discount),
-        childPriceCents:
-          tier.childPriceCents ?? Math.round(tier.adultPriceCents * (1 - discount / 100)),
+        childDiscountPercent: childAllowed ? new Prisma.Decimal(discount) : null,
+        childPriceCents: childAllowed
+          ? tier.childPriceCents ?? Math.round(tier.adultPriceCents * (1 - discount / 100))
+          : null,
         currency,
         isActive: tier.isActive ?? true,
         maxTravelers: tier.maxTravelers,
@@ -703,4 +1213,29 @@ function slugify(value: string) {
     .toLowerCase()
     .replace(/[^a-z0-9]+/g, "-")
     .replace(/^-+|-+$/g, "");
+}
+
+function buildBreadcrumb(
+  destination?: {
+    id: string;
+    name: string;
+    slug: string;
+    type: DestinationType;
+    parent?: unknown;
+  } | null
+) {
+  const chain: Array<{ id: string; name: string; slug: string; type: DestinationType }> = [];
+  let current = destination;
+
+  while (current) {
+    chain.unshift({
+      id: current.id,
+      name: current.name,
+      slug: current.slug,
+      type: current.type
+    });
+    current = current.parent as typeof current;
+  }
+
+  return chain;
 }

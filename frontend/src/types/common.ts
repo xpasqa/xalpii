@@ -1,6 +1,6 @@
 export type ID = string;
 
-export type CurrencyCode = "USD" | "IDR" | "EUR" | "SGD" | "AUD" | string;
+export type CurrencyCode = "USD" | "IDR" | "EUR" | "CHF";
 
 export type LocaleCode = "en-US" | "id-ID" | string;
 

@@ -1,5 +1,5 @@
 import { formatDate } from "../../lib/dates";
-import { formatMoney } from "../../lib/money";
+import { formatBaseUsd } from "../../lib/money";
 import { Button } from "../ui";
 import { BookingStatusBadge, PaymentStatusBadge, type BookingStatus, type PaymentStatus } from "./status-badges";
 
@@ -20,7 +20,6 @@ export function BookingCard({
   guestName,
   date,
   totalMinor,
-  currency,
   bookingStatus,
   paymentStatus
 }: BookingCardProps) {
@@ -40,7 +39,7 @@ export function BookingCard({
         </div>
       </div>
       <div className="mt-5 flex items-center justify-between border-t border-border pt-4">
-        <p className="text-base font-bold text-ink">{formatMoney(totalMinor, currency)}</p>
+        <p className="text-base font-bold text-ink">{formatBaseUsd(totalMinor)}</p>
         <Button variant="outline">Details</Button>
       </div>
     </article>

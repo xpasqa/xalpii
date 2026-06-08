@@ -33,32 +33,40 @@ import {
 } from "../../../lib/bookings";
 import type { Booking, BookingPayment, BookingStatus, PaymentWithBooking } from "../../../lib/bookings";
 import { formatDate } from "../../../lib/dates";
-import { formatMoney } from "../../../lib/money";
+import { formatBaseUsd, formatMoney } from "../../../lib/money";
 import { calculatePricingEstimate, remainingCapacity } from "../../../lib/activity-pricing";
 import { getPublicActivity, mapPublicActivity } from "../../../lib/public-marketplace";
 import type { PublicActivity } from "../../../lib/public-marketplace";
 import { routes } from "../../../lib/routes";
+import { useCurrency } from "../../providers/CurrencyProvider";
 
 type CheckoutManagerProps = {
   activitySlug: string;
   initialAdults?: string;
   initialAvailabilityId?: string;
   initialChildren?: string;
+  initialOptionId?: string;
+  initialSelectedDate?: string;
 };
 
 export function CheckoutManager({
   activitySlug,
   initialAdults,
   initialAvailabilityId,
-  initialChildren
+  initialChildren,
+  initialOptionId,
+  initialSelectedDate
 }: CheckoutManagerProps) {
   const router = useRouter();
+  const { currency: displayCurrency } = useCurrency();
   const [activity, setActivity] = useState<PublicActivity | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [isCreating, setIsCreating] = useState(false);
   const [booking, setBooking] = useState<Booking | null>(null);
+  const [optionId, setOptionId] = useState(initialOptionId ?? "");
   const [availabilityId, setAvailabilityId] = useState("");
+  const [selectedDate, setSelectedDate] = useState(initialSelectedDate ?? todayInputValue());
   const [adults, setAdults] = useState(() => clampQuantity(initialAdults, 1, 14, 1));
   const [children, setChildren] = useState(() => clampQuantity(initialChildren, 0, 14, 0));
 
@@ -67,10 +75,18 @@ export function CheckoutManager({
       try {
         const nextActivity = await getPublicActivity(activitySlug);
         setActivity(nextActivity);
-        const requestedAvailability = nextActivity.availability?.find(
-          (slot) => slot.id === initialAvailabilityId
-        );
-        setAvailabilityId(requestedAvailability?.id ?? nextActivity.availability?.[0]?.id ?? "");
+        const activeOptions = (nextActivity.options ?? []).filter((option) => option.isActive);
+        const requestedOption =
+          activeOptions.find((option) => option.id === initialOptionId) ??
+          activeOptions.find((option) => option.isDefault) ??
+          activeOptions[0];
+        setOptionId(requestedOption?.id ?? "");
+        const optionAvailability = requestedOption?.availability ?? nextActivity.availability ?? [];
+        const requestedAvailability = optionAvailability.find((slot) => slot.id === initialAvailabilityId);
+        setAvailabilityId(requestedAvailability?.id ?? optionAvailability[0]?.id ?? "");
+        if (!initialSelectedDate && requestedOption?.availabilityMode === "ALWAYS_AVAILABLE") {
+          setSelectedDate(nextAvailableDate(requestedOption.availableDays));
+        }
       } catch (caughtError) {
         setError(caughtError instanceof Error ? caughtError.message : "Unable to load checkout");
       } finally {
@@ -79,30 +95,52 @@ export function CheckoutManager({
     }
 
     void loadActivity();
-  }, [activitySlug, initialAvailabilityId]);
+  }, [activitySlug, initialAvailabilityId, initialOptionId, initialSelectedDate]);
 
   const pricing = activity?.pricing?.find((item) => item.isActive) ?? activity?.pricing?.[0];
   const mappedActivity = activity ? mapPublicActivity(activity) : null;
-  const selectedAvailability = activity?.availability?.find((slot) => slot.id === availabilityId);
-  const maxTravelers = remainingCapacity(selectedAvailability);
+  const activeOptions = (activity?.options ?? []).filter((option) => option.isActive);
+  const selectedOption =
+    activeOptions.find((option) => option.id === optionId) ??
+    activeOptions.find((option) => option.isDefault) ??
+    activeOptions[0];
+  const isAlwaysAvailable = selectedOption?.availabilityMode === "ALWAYS_AVAILABLE";
+  const optionAvailability = selectedOption?.availability ?? activity?.availability ?? [];
+  const selectedAvailability = optionAvailability.find((slot) => slot.id === availabilityId);
+  const maxTravelers = isAlwaysAvailable
+    ? Math.max(1, Math.min(14, selectedOption?.dailyCapacity ?? 14))
+    : remainingCapacity(selectedAvailability);
+  const selectedDateAllowed = isAlwaysAvailable
+    ? isDateAllowed(selectedDate, selectedOption?.availableDays)
+    : true;
+  const optionPricingTiers = selectedOption?.pricingTiers ?? [];
   const estimate = activity
     ? calculatePricingEstimate({
         adults,
         children,
-        pricingMode: activity.pricingMode,
-        pricingTiers: activity.pricingTiers,
+        pricingMode: optionPricingTiers.length ? "GROUP_TIER" : activity.pricingMode,
+        pricingTiers: optionPricingTiers.length ? optionPricingTiers : activity.pricingTiers,
         simplePrice: pricing ?? null
       })
     : null;
   const checkoutReturnPath = `${routes.checkout(activitySlug)}?${new URLSearchParams({
     adults: String(adults),
     children: String(children),
-    ...(availabilityId ? { availabilityId } : {})
+    ...(selectedOption ? { optionId: selectedOption.id } : {}),
+    ...(isAlwaysAvailable ? { selectedDate } : availabilityId ? { availabilityId } : {})
   }).toString()}`;
 
   async function submitBooking(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
-    if (!activity || !pricing || !estimate) return;
+    if (!activity || !estimate) return;
+    if (isAlwaysAvailable && !selectedDateAllowed) {
+      setError("Please select a date that matches this package availability.");
+      return;
+    }
+    if (!isAlwaysAvailable && !selectedAvailability) {
+      setError("Please select an available scheduled session.");
+      return;
+    }
 
     setIsCreating(true);
     setError(null);
@@ -110,7 +148,9 @@ export function CheckoutManager({
     try {
       const created = await createBooking({
         activityId: activity.id,
-        availabilityId: availabilityId || undefined,
+        availabilityId: isAlwaysAvailable ? undefined : availabilityId || undefined,
+        optionId: selectedOption?.id,
+        selectedDate: isAlwaysAvailable ? selectedDate : undefined,
         participants: [
           { label: "Adult", participantType: "ADULT", quantity: adults },
           ...(children > 0
@@ -195,6 +235,7 @@ export function CheckoutManager({
             <CardContent className="grid gap-4">
               <SummaryLine label="Booking status" value={formatStatus(booking.status)} />
               <SummaryLine label="Payment status" value={formatStatus(booking.payment?.status ?? "PENDING")} />
+              <SummaryLine label="Base charge" value={formatBaseUsd(booking.totalAmountCents)} />
               <ButtonCTA
                 fullWidth
                 isLoading={isCreating}
@@ -214,15 +255,61 @@ export function CheckoutManager({
                 <CardDescription>Select the session and participants for this booking.</CardDescription>
               </CardHeader>
               <CardContent className="grid gap-4 md:grid-cols-3">
+                {activeOptions.length ? (
+                  <label className="grid gap-2">
+                    <span className="text-sm font-semibold text-travel-dark">Package option</span>
+                    <Select
+                      onChange={(event) => {
+                        const nextOption = activeOptions.find((option) => option.id === event.target.value);
+                        setOptionId(event.target.value);
+                        setAvailabilityId(nextOption?.availability[0]?.id ?? "");
+                        if (nextOption?.availabilityMode === "ALWAYS_AVAILABLE") {
+                          setSelectedDate(nextAvailableDate(nextOption.availableDays));
+                        }
+                      }}
+                      value={selectedOption?.id ?? ""}
+                    >
+                      {activeOptions.map((option) => (
+                        <option key={option.id} value={option.id}>
+                          {option.title}
+                        </option>
+                      ))}
+                    </Select>
+                  </label>
+                ) : null}
                 <label className="grid gap-2">
-                  <span className="text-sm font-semibold text-travel-dark">Session</span>
+                  <span className="text-sm font-semibold text-travel-dark">Date</span>
+                  {isAlwaysAvailable ? (
+                    <div className="grid gap-2">
+                      <Input
+                        className={selectedDateAllowed ? undefined : "border-red-300"}
+                        min={todayInputValue()}
+                        onChange={(event) => setSelectedDate(event.target.value)}
+                        type="date"
+                        value={selectedDate}
+                      />
+                      <span className="text-xs leading-5 text-travel-muted">
+                        {selectedOption?.dailyCapacity
+                          ? `Daily capacity: ${selectedOption.dailyCapacity} travelers.`
+                          : "No daily capacity limit has been set."}
+                        {selectedOption?.availableDays?.length
+                          ? ` Available days: ${formatAvailableDays(selectedOption.availableDays)}.`
+                          : ""}
+                      </span>
+                      {!selectedDateAllowed ? (
+                        <span className="text-xs font-semibold text-red-700">
+                          This package is not available on the selected weekday.
+                        </span>
+                      ) : null}
+                    </div>
+                  ) : (
                   <Select
-                    disabled={!activity.availability?.length}
+                    disabled={!optionAvailability.length}
                     onChange={(event) => setAvailabilityId(event.target.value)}
                     value={availabilityId}
                   >
-                    {activity.availability?.length ? (
-                      activity.availability.map((slot) => (
+                    {optionAvailability.length ? (
+                      optionAvailability.map((slot) => (
                         <option key={slot.id} value={slot.id}>
                           {formatDate(slot.startDateTime, "en-US", { dateStyle: "medium", timeStyle: "short" })}
                         </option>
@@ -231,6 +318,7 @@ export function CheckoutManager({
                       <option value="">No fixed session</option>
                     )}
                   </Select>
+                  )}
                 </label>
                 <label className="grid gap-2">
                   <span className="text-sm font-semibold text-travel-dark">Adults</span>
@@ -282,7 +370,11 @@ export function CheckoutManager({
 
             {error ? <ErrorState title="Checkout error" description={error} /> : null}
 
-            <ButtonCTA disabled={!pricing || !estimate} isLoading={isCreating} type="submit">
+            <ButtonCTA
+              disabled={!estimate || (isAlwaysAvailable ? !selectedDateAllowed : !selectedAvailability)}
+              isLoading={isCreating}
+              type="submit"
+            >
               Continue to payment
             </ButtonCTA>
           </form>
@@ -299,16 +391,25 @@ export function CheckoutManager({
           <CardContent className="space-y-3">
             <SummaryLine
               label={`Adult x ${adults}`}
-              value={estimate ? formatMoney(estimate.adultLineTotalCents, estimate.currency) : "Price unavailable"}
+              value={estimate ? formatMoney(estimate.adultLineTotalCents, displayCurrency) : "Price unavailable"}
             />
             {children > 0 ? (
               <SummaryLine
                 label={`Child x ${children}`}
-                value={estimate ? formatMoney(estimate.childLineTotalCents, estimate.currency) : "Price unavailable"}
+                value={estimate ? formatMoney(estimate.childLineTotalCents, displayCurrency) : "Price unavailable"}
               />
             ) : null}
             <div className="border-t border-[#2B2B2B]/10 pt-3">
-              <SummaryLine label="Total" value={estimate ? formatMoney(estimate.totalAmountCents, estimate.currency) : "Price unavailable"} />
+              <SummaryLine label="Total" value={estimate ? formatMoney(estimate.totalAmountCents, displayCurrency) : "Price unavailable"} />
+              {estimate && displayCurrency !== "USD" ? (
+                <p className="mt-2 text-right text-xs leading-5 text-travel-muted">
+                  Base price charged in USD for MVP: {formatBaseUsd(estimate.totalAmountCents)}
+                </p>
+              ) : (
+                <p className="mt-2 text-right text-xs leading-5 text-travel-muted">
+                  Booking and payment source of truth is USD.
+                </p>
+              )}
             </div>
           </CardContent>
         </Card>
@@ -321,6 +422,41 @@ function clampQuantity(value: string | undefined, min: number, max: number, fall
   const parsed = Number(value);
   if (!Number.isFinite(parsed)) return fallback;
   return Math.min(max, Math.max(min, Math.floor(parsed)));
+}
+
+function todayInputValue() {
+  return new Date().toISOString().slice(0, 10);
+}
+
+function nextAvailableDate(availableDays?: string[] | null) {
+  const allowed = new Set((availableDays ?? []).map((day) => day.toUpperCase()));
+  const date = new Date();
+
+  for (let offset = 1; offset <= 14; offset += 1) {
+    const candidate = new Date(date);
+    candidate.setDate(date.getDate() + offset);
+    if (!allowed.size || allowed.has(weekdayByIndex[candidate.getDay()])) {
+      return candidate.toISOString().slice(0, 10);
+    }
+  }
+
+  return todayInputValue();
+}
+
+const weekdayByIndex = ["SUNDAY", "MONDAY", "TUESDAY", "WEDNESDAY", "THURSDAY", "FRIDAY", "SATURDAY"];
+
+function isDateAllowed(value: string, availableDays?: string[] | null) {
+  if (!availableDays?.length) return true;
+  const date = new Date(`${value}T00:00:00Z`);
+  if (Number.isNaN(date.getTime())) return false;
+  const allowed = new Set(availableDays.map((day) => day.toUpperCase()));
+  return allowed.has(weekdayByIndex[date.getUTCDay()]);
+}
+
+function formatAvailableDays(availableDays: string[]) {
+  return availableDays
+    .map((day) => day.charAt(0) + day.slice(1).toLowerCase())
+    .join(", ");
 }
 
 export function UserBookingsManager() {
@@ -342,10 +478,11 @@ export function UserBookingsManager() {
     void load();
   }, []);
 
-  return <BookingTable title="My bookings" description="Your confirmed and pending Alpii bookings." bookings={bookings} error={error} isLoading={isLoading} />;
+  return <BookingTable title="My bookings" description="Your confirmed and pending Alpii bookings." bookings={bookings} error={error} isLoading={isLoading} useDisplayCurrency />;
 }
 
 export function UserBookingDetailManager({ bookingId }: { bookingId: string }) {
+  const { currency: displayCurrency } = useCurrency();
   const [booking, setBooking] = useState<Booking | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [isLoading, setIsLoading] = useState(true);
@@ -384,7 +521,10 @@ export function UserBookingDetailManager({ bookingId }: { bookingId: string }) {
             <SummaryLine label="Booking status" value={formatStatus(booking.status)} />
             <SummaryLine label="Payment status" value={formatStatus(booking.payment?.status ?? "PENDING")} />
             <SummaryLine label="Participants" value={participantLabel(booking)} />
-            <SummaryLine label="Total" value={formatMoney(booking.totalAmountCents, booking.currency)} />
+            <SummaryLine label="Total" value={formatMoney(booking.totalAmountCents, displayCurrency)} />
+            {displayCurrency !== "USD" ? (
+              <SummaryLine label="Base charge" value={formatBaseUsd(booking.totalAmountCents)} />
+            ) : null}
           </CardContent>
         </Card>
         <Card>
@@ -566,7 +706,7 @@ export function AdminPaymentsManager() {
     { key: "activity", header: "Activity", cell: (payment: PaymentWithBooking) => payment.booking.activity.title },
     { key: "customer", header: "Customer", cell: (payment: PaymentWithBooking) => payment.booking.user?.email ?? "Customer" },
     { key: "status", header: "Status", cell: (payment: PaymentWithBooking) => <PaymentStatusBadge status={payment.status} /> },
-    { key: "amount", header: "Amount", cell: (payment: PaymentWithBooking) => formatMoney(payment.amountCents, payment.currency) },
+    { key: "amount", header: "Amount (USD)", cell: (payment: PaymentWithBooking) => formatBaseUsd(payment.amountCents) },
     { key: "created", header: "Created", cell: (payment: PaymentWithBooking) => formatDate(payment.createdAt) }
   ];
 
@@ -574,7 +714,7 @@ export function AdminPaymentsManager() {
     <Card>
       <CardHeader>
         <CardTitle>Payments</CardTitle>
-        <CardDescription>Read-only dummy payment monitor.</CardDescription>
+        <CardDescription>Read-only dummy payment monitor. Amounts shown in USD.</CardDescription>
       </CardHeader>
       <CardContent>
         {error ? <ErrorState title="Payments unavailable" description={error} /> : null}
@@ -595,6 +735,7 @@ function BookingTable({
   search,
   setSearch,
   showCustomer = false,
+  useDisplayCurrency = false,
   title
 }: {
   bookings: Booking[];
@@ -605,8 +746,10 @@ function BookingTable({
   search?: string;
   setSearch?: (value: string) => void;
   showCustomer?: boolean;
+  useDisplayCurrency?: boolean;
   title: string;
 }) {
+  const { currency: displayCurrency } = useCurrency();
   const columns = useMemo(
     () => [
       {
@@ -625,7 +768,14 @@ function BookingTable({
       { key: "bookingStatus", header: "Booking", cell: (booking: Booking) => <BookingStatusBadge status={booking.status} /> },
       { key: "paymentStatus", header: "Payment", cell: (booking: Booking) => <PaymentStatusBadge status={booking.payment?.status ?? "PENDING"} /> },
       { key: "voucher", header: "Voucher", cell: (booking: Booking) => booking.voucher ? <VoucherStatusBadge status={booking.voucher.status} /> : "Not issued" },
-      { key: "total", header: "Total", cell: (booking: Booking) => formatMoney(booking.totalAmountCents, booking.currency) },
+      {
+        key: "total",
+        header: useDisplayCurrency ? `Total (${displayCurrency})` : "Total (USD)",
+        cell: (booking: Booking) =>
+          useDisplayCurrency
+            ? formatMoney(booking.totalAmountCents, displayCurrency)
+            : formatBaseUsd(booking.totalAmountCents)
+      },
       { key: "created", header: "Booked", cell: (booking: Booking) => formatDate(booking.createdAt) },
       {
         key: "actions",
@@ -638,7 +788,7 @@ function BookingTable({
         )
       }
     ],
-    [showCustomer]
+    [displayCurrency, showCustomer, useDisplayCurrency]
   );
 
   return (

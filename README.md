@@ -251,6 +251,19 @@ http://localhost:3000/dev/design-system
 
 The preview route uses mock data only and is intended for reviewing reusable UI, layout shells, and domain display components before product pages are built.
 
+### MVP Currency Architecture
+
+Alpii uses USD as the only partner pricing and booking base currency for the MVP.
+
+- Partners enter activity prices in normal USD units. For example, `$48.00` is stored as `4800` USD minor units.
+- Activity pricing tiers, booking totals, dummy payments, platform fees, and partner payout snapshots are stored in USD cents.
+- Public users can display prices in USD, IDR, EUR, or CHF from the public header.
+- Public conversion is display-only and is stored locally in the browser.
+- Static MVP rates are USD `1`, IDR `16000`, EUR `0.92`, and CHF `0.89`.
+- The backend always recalculates booking totals in USD. Frontend estimates are never trusted as booking totals.
+
+Production currency support should replace static rates with a real FX provider and store the applied booking exchange-rate snapshot. Admin accounting views remain USD-based.
+
 ### Frontend Dev Cache Notes
 
 Do not run `npm run build` while `npm run dev` is still running. Stop the dev server first, then run the production build verification.

@@ -4,11 +4,13 @@ import type {
   ActivityStatus,
   LookupCategory,
   LookupCity,
+  LookupDestination,
   PartnerActivityInput,
   PartnerAvailabilityInput,
   PartnerActivityAvailability,
   PartnerActivityMedia,
   PartnerActivityPricing,
+  PartnerActivityOption,
   PartnerMediaInput,
   PartnerPricingInput
 } from "./partner-activities";
@@ -17,6 +19,7 @@ export type AdminActivity = {
   id: string;
   partnerId: string;
   cityId: string;
+  destinationId?: string | null;
   categoryId: string;
   title: string;
   slug: string;
@@ -47,10 +50,12 @@ export type AdminActivity = {
     };
   };
   city: LookupCity;
+  destination?: LookupDestination | null;
   category: LookupCategory;
   media: PartnerActivityMedia[];
   pricing: PartnerActivityPricing[];
   pricingTiers: import("./partner-activities").PartnerActivityPricingTier[];
+  options?: PartnerActivityOption[];
   availability?: PartnerActivityAvailability[];
   reviews?: Array<{
     id: string;
@@ -65,6 +70,7 @@ export type AdminActivityQuery = {
   status?: string;
   search?: string;
   cityId?: string;
+  destinationId?: string;
   categoryId?: string;
   partnerId?: string;
 };
@@ -189,6 +195,7 @@ function buildQuery(query: AdminActivityQuery) {
   if (query.status) params.set("status", query.status);
   if (query.search?.trim()) params.set("search", query.search.trim());
   if (query.cityId) params.set("cityId", query.cityId);
+  if (query.destinationId) params.set("destinationId", query.destinationId);
   if (query.categoryId) params.set("categoryId", query.categoryId);
   if (query.partnerId) params.set("partnerId", query.partnerId);
   const value = params.toString();

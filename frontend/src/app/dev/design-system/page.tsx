@@ -61,8 +61,8 @@ const activities = [
     duration: "8 hours | Pickup available",
     rating: 4.8,
     reviewCount: 2489,
-    price: 625000,
-    currency: "IDR",
+    price: 6200,
+    currency: "USD" as const,
     href: "#activity-bali-waterfall",
     badge: "Bestseller",
     isFavorite: true
@@ -78,7 +78,7 @@ const activities = [
     rating: 4.9,
     reviewCount: 812,
     price: 7400,
-    currency: "USD",
+    currency: "USD" as const,
     href: "#activity-kyoto-tea",
     badge: "Top rated"
   },
@@ -93,7 +93,7 @@ const activities = [
     rating: 4.7,
     reviewCount: 1350,
     price: 3900,
-    currency: "USD",
+    currency: "USD" as const,
     href: "#activity-lisbon-sailing",
     badge: "Limited spots"
   },
@@ -108,7 +108,7 @@ const activities = [
     rating: 4.8,
     reviewCount: 979,
     price: 6800,
-    currency: "USD",
+    currency: "USD" as const,
     href: "#activity-istanbul-food",
     badge: "New"
   }

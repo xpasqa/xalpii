@@ -1,6 +1,11 @@
 import { Injectable, NotFoundException } from "@nestjs/common";
-import { ActivityStatus, Prisma } from "@prisma/client";
+import { ActivityStatus, DestinationType, Prisma } from "@prisma/client";
 import { PrismaService } from "../prisma.service";
+import { BASE_CURRENCY } from "../common/money.constants";
+import {
+  destinationParentInclude,
+  getDestinationBreadcrumb
+} from "../destinations/destination.util";
 
 type PublicActivityQuery = {
   citySlug?: string;
@@ -12,19 +17,32 @@ type PublicActivityQuery = {
 const publicActivityListInclude = {
   category: true,
   city: true,
+  destination: {
+    include: destinationParentInclude(4)
+  },
   media: {
     orderBy: [{ isCover: "desc" }, { sortOrder: "asc" }],
     take: 1,
     include: { file: true }
   },
   pricing: {
-    where: { isActive: true },
+    where: { currency: BASE_CURRENCY, isActive: true },
     orderBy: { createdAt: "desc" },
     take: 1
   },
   pricingTiers: {
-    where: { isActive: true },
+    where: { currency: BASE_CURRENCY, isActive: true },
     orderBy: [{ minTravelers: "asc" }, { maxTravelers: "asc" }]
+  },
+  options: {
+    where: { isActive: true },
+    orderBy: [{ sortOrder: "asc" }, { createdAt: "asc" }],
+    include: {
+      pricingTiers: {
+        where: { currency: BASE_CURRENCY, isActive: true },
+        orderBy: [{ minTravelers: "asc" }, { maxTravelers: "asc" }]
+      }
+    }
   }
 } satisfies Prisma.ActivityInclude;
 
@@ -38,6 +56,9 @@ const publicActivityDetailInclude = {
   },
   category: true,
   city: true,
+  destination: {
+    include: destinationParentInclude(4)
+  },
   media: {
     orderBy: [{ sortOrder: "asc" }, { createdAt: "asc" }],
     include: { file: true }
@@ -49,13 +70,30 @@ const publicActivityDetailInclude = {
     }
   },
   pricing: {
-    where: { isActive: true },
+    where: { currency: BASE_CURRENCY, isActive: true },
     orderBy: { createdAt: "desc" },
     take: 1
   },
   pricingTiers: {
-    where: { isActive: true },
+    where: { currency: BASE_CURRENCY, isActive: true },
     orderBy: [{ minTravelers: "asc" }, { maxTravelers: "asc" }]
+  },
+  options: {
+    where: { isActive: true },
+    orderBy: [{ sortOrder: "asc" }, { createdAt: "asc" }],
+    include: {
+      availability: {
+        where: {
+          isActive: true,
+          startDateTime: { gte: new Date() }
+        },
+        orderBy: { startDateTime: "asc" }
+      },
+      pricingTiers: {
+        where: { currency: BASE_CURRENCY, isActive: true },
+        orderBy: [{ minTravelers: "asc" }, { maxTravelers: "asc" }]
+      }
+    }
   }
 } satisfies Prisma.ActivityInclude;
 
@@ -77,6 +115,33 @@ export class PublicMarketplaceService {
   }
 
   async getCity(slug: string) {
+    const destination = await this.prisma.destination.findFirst({
+      where: { isActive: true, slug },
+      include: destinationParentInclude(4)
+    });
+
+    if (destination) {
+      const destinationIds = await this.getDestinationAndDescendantIds(destination.id);
+      const activityCount = await this.prisma.activity.count({
+        where: {
+          OR: [publishedPricingWhere()],
+          status: ActivityStatus.PUBLISHED,
+          destinationId: { in: destinationIds }
+        }
+      });
+
+      return {
+        id: destination.id,
+        name: destination.name,
+        slug: destination.slug,
+        country: getDestinationBreadcrumb(destination)[0]?.name ?? destination.name,
+        description: destination.description,
+        imageFile: null,
+        destination: withDestinationBreadcrumb(destination),
+        activityCount
+      };
+    }
+
     const city = await this.prisma.city.findFirst({
       where: { isActive: true, slug }
     });
@@ -98,11 +163,21 @@ export class PublicMarketplaceService {
   async listActivities(query: PublicActivityQuery) {
     const limit = clampLimit(query.limit);
     const where: Prisma.ActivityWhereInput = {
+      OR: [publishedPricingWhere()],
       status: ActivityStatus.PUBLISHED
     };
 
     if (query.citySlug) {
-      where.city = { slug: query.citySlug, isActive: true };
+      const destination = await this.prisma.destination.findFirst({
+        where: { isActive: true, slug: query.citySlug },
+        select: { id: true }
+      });
+
+      if (destination) {
+        where.destinationId = { in: await this.getDestinationAndDescendantIds(destination.id) };
+      } else {
+        where.city = { slug: query.citySlug, isActive: true };
+      }
     }
 
     if (query.categorySlug) {
@@ -111,12 +186,16 @@ export class PublicMarketplaceService {
 
     if (query.search?.trim()) {
       const search = query.search.trim();
-      where.OR = [
+      where.AND = [
+        { OR: where.OR },
+        { OR: [
         { title: { contains: search, mode: "insensitive" } },
         { shortDescription: { contains: search, mode: "insensitive" } },
         { city: { name: { contains: search, mode: "insensitive" } } },
         { category: { name: { contains: search, mode: "insensitive" } } }
+        ] }
       ];
+      delete where.OR;
     }
 
     const activities = await this.prisma.activity.findMany({
@@ -132,6 +211,7 @@ export class PublicMarketplaceService {
   async getActivity(slug: string) {
     const activity = await this.prisma.activity.findFirst({
       where: {
+        OR: [publishedPricingWhere()],
         slug,
         status: ActivityStatus.PUBLISHED
       },
@@ -165,30 +245,113 @@ export class PublicMarketplaceService {
   private async publishedCountsByCity() {
     const rows = await this.prisma.activity.groupBy({
       by: ["cityId"],
-      where: { status: ActivityStatus.PUBLISHED },
+      where: {
+        OR: [publishedPricingWhere()],
+        status: ActivityStatus.PUBLISHED
+      },
       _count: { _all: true }
     });
 
     return new Map(rows.map((row) => [row.cityId, row._count._all]));
   }
+
+  private async getDestinationAndDescendantIds(destinationId: string) {
+    const ids = new Set<string>([destinationId]);
+    let frontier = [destinationId];
+
+    while (frontier.length) {
+      const children = await this.prisma.destination.findMany({
+        where: { parentId: { in: frontier } },
+        select: { id: true }
+      });
+      frontier = children.map((child) => child.id).filter((id) => !ids.has(id));
+      frontier.forEach((id) => ids.add(id));
+    }
+
+    return [...ids];
+  }
 }
 
 function withPublicPricingSummary<
   TActivity extends {
+    destination?: unknown;
     pricing: Array<{ priceCents: number }>;
     pricingTiers: Array<{ adultPriceCents: number; isActive: boolean }>;
+    options?: Array<{
+      pricingTiers: Array<{ adultPriceCents: number; isActive: boolean }>;
+    }>;
   }
 >(activity: TActivity) {
+  const optionTierPrices = (activity.options ?? [])
+    .flatMap((option) => option.pricingTiers)
+    .filter((tier) => tier.isActive)
+    .map((tier) => tier.adultPriceCents);
   const tierPrices = activity.pricingTiers
     .filter((tier) => tier.isActive)
     .map((tier) => tier.adultPriceCents);
 
+  const fromPriceCents =
+    optionTierPrices.length > 0
+      ? Math.min(...optionTierPrices)
+      : tierPrices.length > 0
+      ? Math.min(...tierPrices)
+      : activity.pricing[0]?.priceCents ?? null;
+
   return {
     ...activity,
-    fromPriceCents:
-      tierPrices.length > 0
-        ? Math.min(...tierPrices)
-        : activity.pricing[0]?.priceCents ?? null
+    baseCurrency: BASE_CURRENCY,
+    destination: activity.destination
+      ? withDestinationBreadcrumb(activity.destination as Parameters<typeof withDestinationBreadcrumb>[0])
+      : null,
+    fromPriceCents,
+    fromPriceMinorUsd: fromPriceCents
+  };
+}
+
+function withDestinationBreadcrumb<
+  TDestination extends {
+    id: string;
+    name: string;
+    slug: string;
+    type: DestinationType;
+    parent?: unknown;
+  }
+>(destination: TDestination) {
+  const breadcrumb = getDestinationBreadcrumb(
+    destination as unknown as Parameters<typeof getDestinationBreadcrumb>[0]
+  );
+  return {
+    ...destination,
+    breadcrumb,
+    breadcrumbLabel: breadcrumb.map((item) => item.name).join(" / ")
+  };
+}
+
+function publishedPricingWhere(): Prisma.ActivityWhereInput {
+  return {
+    OR: [
+      {
+        options: {
+          some: {
+            isActive: true,
+            pricingTiers: {
+              some: {
+                currency: BASE_CURRENCY,
+                isActive: true
+              }
+            }
+          }
+        }
+      },
+      {
+        pricing: {
+          some: {
+            currency: BASE_CURRENCY,
+            isActive: true
+          }
+        }
+      }
+    ]
   };
 }
 

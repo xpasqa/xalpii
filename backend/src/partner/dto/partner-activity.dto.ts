@@ -3,6 +3,7 @@ import {
   Allow,
   IsArray,
   IsBoolean,
+  Equals,
   IsDateString,
   IsEnum,
   IsInt,
@@ -14,7 +15,7 @@ import {
   Min,
   ValidateNested
 } from "class-validator";
-import { ActivityStatus, PricingMode } from "@prisma/client";
+import { ActivityStatus, AvailabilityMode, PricingMode } from "@prisma/client";
 
 export class PartnerActivityQueryDto {
   @IsOptional()
@@ -36,8 +37,13 @@ export class CreatePartnerActivityDto {
   @MaxLength(200)
   slug?: string;
 
+  @IsOptional()
   @IsString()
-  cityId!: string;
+  cityId?: string;
+
+  @IsOptional()
+  @IsString()
+  destinationId?: string;
 
   @IsString()
   categoryId!: string;
@@ -100,6 +106,10 @@ export class UpdatePartnerActivityDto {
   @IsOptional()
   @IsString()
   cityId?: string;
+
+  @IsOptional()
+  @IsString()
+  destinationId?: string;
 
   @IsOptional()
   @IsString()
@@ -176,6 +186,10 @@ export class ActivityPricingTierDto {
   childPriceCents?: number;
 
   @IsOptional()
+  @IsBoolean()
+  childAllowed?: boolean;
+
+  @IsOptional()
   @Type(() => Number)
   @IsNumber()
   @Min(0)
@@ -193,6 +207,7 @@ export class UpsertPartnerActivityPricingDto {
   pricingMode?: PricingMode;
 
   @IsString()
+  @Equals("USD", { message: "Partner pricing currency must be USD" })
   @MaxLength(3)
   currency!: string;
 
@@ -255,6 +270,122 @@ export class UpdatePartnerActivityAvailabilityDto {
   @IsOptional()
   @IsBoolean()
   isActive?: boolean;
+}
+
+export class CreatePartnerActivityOptionDto {
+  @IsString()
+  @MaxLength(120)
+  title!: string;
+
+  @IsOptional()
+  @IsString()
+  @MaxLength(140)
+  slug?: string;
+
+  @IsOptional()
+  @IsString()
+  description?: string;
+
+  @IsOptional()
+  @IsString()
+  @MaxLength(120)
+  durationLabel?: string;
+
+  @IsOptional()
+  @IsString()
+  meetingPoint?: string;
+
+  @IsOptional()
+  @IsEnum(AvailabilityMode)
+  availabilityMode?: AvailabilityMode;
+
+  @IsOptional()
+  @IsArray()
+  @IsString({ each: true })
+  availableDays?: string[];
+
+  @IsOptional()
+  @Type(() => Number)
+  @IsInt()
+  @Min(1)
+  dailyCapacity?: number;
+
+  @IsOptional()
+  @IsBoolean()
+  isActive?: boolean;
+
+  @IsOptional()
+  @Type(() => Number)
+  @IsInt()
+  @Min(0)
+  sortOrder?: number;
+}
+
+export class UpdatePartnerActivityOptionDto {
+  @IsOptional()
+  @IsString()
+  @MaxLength(120)
+  title?: string;
+
+  @IsOptional()
+  @IsString()
+  @MaxLength(140)
+  slug?: string;
+
+  @IsOptional()
+  @IsString()
+  description?: string;
+
+  @IsOptional()
+  @IsString()
+  @MaxLength(120)
+  durationLabel?: string;
+
+  @IsOptional()
+  @IsString()
+  meetingPoint?: string;
+
+  @IsOptional()
+  @IsEnum(AvailabilityMode)
+  availabilityMode?: AvailabilityMode;
+
+  @IsOptional()
+  @IsArray()
+  @IsString({ each: true })
+  availableDays?: string[];
+
+  @IsOptional()
+  @Type(() => Number)
+  @IsInt()
+  @Min(1)
+  dailyCapacity?: number;
+
+  @IsOptional()
+  @IsBoolean()
+  isActive?: boolean;
+
+  @IsOptional()
+  @Type(() => Number)
+  @IsInt()
+  @Min(0)
+  sortOrder?: number;
+}
+
+export class UpsertPartnerActivityOptionPricingDto {
+  @IsString()
+  @Equals("USD", { message: "Partner pricing currency must be USD" })
+  @MaxLength(3)
+  currency!: string;
+
+  @IsOptional()
+  @IsString()
+  @MaxLength(80)
+  priceType?: string;
+
+  @IsArray()
+  @ValidateNested({ each: true })
+  @Type(() => ActivityPricingTierDto)
+  tiers!: ActivityPricingTierDto[];
 }
 
 export class CreatePartnerActivityMediaDto {

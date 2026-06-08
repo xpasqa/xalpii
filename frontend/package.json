@@ -11,9 +11,11 @@
     "start": "next start --hostname 0.0.0.0 --port 3000"
   },
   "dependencies": {
+    "@radix-ui/react-popover": "^1.1.16",
     "lucide-react": "^1.17.0",
     "next": "^15.3.3",
     "react": "^19.1.0",
+    "react-day-picker": "^10.0.1",
     "react-dom": "^19.1.0"
   },
   "devDependencies": {

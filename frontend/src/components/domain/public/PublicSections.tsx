@@ -367,5 +367,5 @@ export function PriceLine({ label, value }: { label: string; value: string }) {
 }
 
 export function activityPrice(activity: TravelActivity) {
-  return formatMoney(activity.price, activity.currency);
+  return formatMoney(activity.price, "USD");
 }

@@ -1,6 +1,32 @@
 import type { CurrencyCode } from "../types/common";
 import type { ActivityPricingTier, PricingMode } from "../lib/activity-pricing";
 
+export type TravelActivityAvailability = {
+  id: string;
+  startDateTime: string;
+  endDateTime?: string | null;
+  capacity?: number | null;
+  bookedCount: number;
+  isActive: boolean;
+};
+
+export type TravelActivityOption = {
+  id: string;
+  title: string;
+  slug: string;
+  description?: string | null;
+  durationLabel?: string | null;
+  meetingPoint?: string | null;
+  availabilityMode: "SCHEDULED_SESSIONS" | "ALWAYS_AVAILABLE";
+  availableDays?: string[] | null;
+  dailyCapacity?: number | null;
+  isDefault: boolean;
+  isActive: boolean;
+  sortOrder: number;
+  pricingTiers: ActivityPricingTier[];
+  availability: TravelActivityAvailability[];
+};
+
 export type TravelCity = {
   slug: string;
   name: string;
@@ -31,14 +57,8 @@ export type TravelActivity = {
   currency: CurrencyCode;
   pricingMode?: PricingMode;
   pricingTiers?: ActivityPricingTier[];
-  availability?: Array<{
-    id: string;
-    startDateTime: string;
-    endDateTime?: string | null;
-    capacity?: number | null;
-    bookedCount: number;
-    isActive: boolean;
-  }>;
+  availability?: TravelActivityAvailability[];
+  options?: TravelActivityOption[];
   badge?: string;
   badgeLabel?: string;
   providerName?: string;
@@ -188,8 +208,8 @@ export const activities: TravelActivity[] = [
     duration: "4 hours",
     rating: 4.9,
     reviewCount: 1248,
-    price: 540000,
-    currency: "IDR",
+    price: 8000,
+    currency: "USD",
     badge: "Bestseller",
     badgeLabel: "Popular choice",
     providerName: "Alpii Local Hosts",
@@ -271,8 +291,8 @@ export const activities: TravelActivity[] = [
     duration: "6 hours",
     rating: 4.8,
     reviewCount: 2104,
-    price: 780000,
-    currency: "IDR",
+    price: 8000,
+    currency: "USD",
     badge: "Top rated",
     badgeLabel: "Likely to sell out",
     providerName: "Batur Ridge Guides",
@@ -601,8 +621,8 @@ export const activities: TravelActivity[] = [
     duration: "2 hours",
     rating: 4.8,
     reviewCount: 736,
-    price: 420000,
-    currency: "IDR",
+    price: 6500,
+    currency: "USD",
     badge: "New",
     summary: "A focused surf session with a local instructor on a beginner-friendly Canggu break.",
     description:

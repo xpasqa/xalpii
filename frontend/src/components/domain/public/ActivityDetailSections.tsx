@@ -1,7 +1,7 @@
 "use client";
 
 import type { ReactNode } from "react";
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import {
   CalendarDays,
   Check,
@@ -19,7 +19,11 @@ import {
   Utensils,
   X
 } from "lucide-react";
-import type { TravelActivity } from "../../../data/mock-travel";
+import type {
+  TravelActivity,
+  TravelActivityAvailability,
+  TravelActivityOption
+} from "../../../data/mock-travel";
 import { formatMoney } from "../../../lib/money";
 import {
   calculatePricingEstimate,
@@ -27,7 +31,19 @@ import {
   travelerSummary
 } from "../../../lib/activity-pricing";
 import { routes } from "../../../lib/routes";
-import { ButtonCTA, Card, CardContent, CardHeader, CardTitle } from "../../ui";
+import {
+  ButtonCTA,
+  Calendar,
+  Card,
+  CardContent,
+  CardHeader,
+  CardTitle,
+  Dialog,
+  Popover,
+  PopoverContent,
+  PopoverTrigger
+} from "../../ui";
+import { useCurrency } from "../../providers/CurrencyProvider";
 
 type DetailSectionProps = {
   activity: TravelActivity;
@@ -119,30 +135,88 @@ export function ActivityDetailGallery({ activity }: DetailSectionProps) {
 }
 
 export function ActivityBookingBox({ activity }: DetailSectionProps) {
-  const availability = activity.availability ?? [];
-  const [availabilityId, setAvailabilityId] = useState(availability[0]?.id ?? "");
+  const { currency: displayCurrency } = useCurrency();
+  const isDesktopCalendar = useDesktopCalendar();
+  const activeOptions = (activity.options ?? []).filter((option) => option.isActive);
+  const initialOption = activeOptions.find((option) => option.isDefault) ?? activeOptions[0] ?? null;
   const [adults, setAdults] = useState(1);
   const [children, setChildren] = useState(0);
   const [openPanel, setOpenPanel] = useState<"date" | "travelers" | null>(null);
-  const selectedAvailability =
-    availability.find((item) => item.id === availabilityId) ?? availability[0];
-  const maxTravelers = remainingCapacity(selectedAvailability);
-  const estimate = useMemo(
+  const [selectedDate, setSelectedDate] = useState("");
+  const [availabilityModalOpen, setAvailabilityModalOpen] = useState(false);
+  const [selectedModalOptionId, setSelectedModalOptionId] = useState("");
+  const [selectedModalAvailabilityId, setSelectedModalAvailabilityId] = useState("");
+  const [inlineError, setInlineError] = useState<string | null>(null);
+  const availablePackages = useMemo(
     () =>
-      calculatePricingEstimate({
-        adults,
-        children,
-        pricingMode: activity.pricingMode,
-        pricingTiers: activity.pricingTiers,
-        simplePrice: { currency: activity.currency, priceCents: activity.price }
-      }),
-    [activity.currency, activity.price, activity.pricingMode, activity.pricingTiers, adults, children]
+      selectedDate
+        ? getAvailablePackages({
+            activity,
+            adults,
+            children,
+            selectedDate
+          })
+        : [],
+    [activity, adults, children, selectedDate]
   );
-  const checkoutHref = `${routes.checkout(activity.slug)}?${new URLSearchParams({
-    adults: String(adults),
-    children: String(children),
-    ...(selectedAvailability ? { availabilityId: selectedAvailability.id } : {})
-  }).toString()}`;
+  const selectedPackage =
+    availablePackages.find((item) => item.option.id === selectedModalOptionId) ?? null;
+  const selectedPackageAvailability =
+    selectedPackage?.sessions.find((session) => session.id === selectedModalAvailabilityId) ??
+    selectedPackage?.sessions[0] ??
+    null;
+  const checkoutHref =
+    selectedPackage &&
+    `${routes.checkout(activity.slug)}?${new URLSearchParams({
+      adults: String(adults),
+      children: String(children),
+      optionId: selectedPackage.option.id,
+      ...(selectedPackage.option.availabilityMode === "ALWAYS_AVAILABLE"
+        ? { selectedDate }
+        : selectedPackageAvailability
+        ? { availabilityId: selectedPackageAvailability.id }
+        : {})
+    }).toString()}`;
+  const childDiscountBadge = firstDiscountBadge(activeOptions, activity);
+
+  function resetPackageSelection() {
+    setSelectedModalOptionId("");
+    setSelectedModalAvailabilityId("");
+  }
+
+  function selectDate(date: string) {
+    setSelectedDate(date);
+    setOpenPanel(null);
+    setInlineError(null);
+    resetPackageSelection();
+  }
+
+  function updateAdults(value: number) {
+    setAdults(value);
+    resetPackageSelection();
+  }
+
+  function updateChildren(value: number) {
+    setChildren(value);
+    resetPackageSelection();
+  }
+
+  function checkAvailability() {
+    if (!selectedDate) {
+      setInlineError("Please select a date.");
+      return;
+    }
+
+    setInlineError(null);
+    const packages = getAvailablePackages({ activity, adults, children, selectedDate });
+    if (packages.length === 1) {
+      setSelectedModalOptionId(packages[0].option.id);
+      setSelectedModalAvailabilityId(packages[0].sessions[0]?.id ?? "");
+    } else {
+      resetPackageSelection();
+    }
+    setAvailabilityModalOpen(true);
+  }
 
   return (
     <div className="space-y-4">
@@ -151,27 +225,45 @@ export function ActivityBookingBox({ activity }: DetailSectionProps) {
           <div className="font-interface text-travel-dark">
             <p className="text-xs font-medium text-travel-muted">From</p>
             <span className="mt-1 inline-block text-2xl font-semibold tracking-normal">
-              {formatMoney(activity.price, activity.currency)}
+              {formatMoney(activity.price, displayCurrency)}
             </span>
             <span className="ml-2 text-xs font-normal text-travel-muted">per person</span>
           </div>
 
           <div className={`relative grid rounded-travel-lg border ${containerOutlineClass} md:grid-cols-2`}>
-            <button
-              className="flex min-h-[58px] items-center justify-between px-3 py-2.5 text-left transition hover:bg-travel-bg"
-              onClick={() => setOpenPanel(openPanel === "date" ? null : "date")}
-              type="button"
+            <Popover
+              onOpenChange={(open) => setOpenPanel(open ? "date" : null)}
+              open={openPanel === "date"}
             >
-              <span>
-                <span className="block text-[11px] font-medium text-travel-muted">Date</span>
-                <span className="mt-0.5 block text-sm font-medium text-travel-dark">
-                  {selectedAvailability
-                    ? formatSessionDate(selectedAvailability.startDateTime)
-                    : "No sessions available"}
-                </span>
-              </span>
-              <ChevronDown className="size-3.5 text-travel-muted" />
-            </button>
+              <PopoverTrigger asChild>
+                <button
+                  className="flex min-h-[58px] items-center justify-between px-3 py-2.5 text-left transition hover:bg-travel-bg"
+                  type="button"
+                >
+                  <span>
+                    <span className="block text-[11px] font-medium text-travel-muted">Date</span>
+                    <span className="mt-0.5 block text-sm font-medium text-travel-dark">
+                      {selectedDate ? formatTravelDate(selectedDate) : "Select date"}
+                    </span>
+                  </span>
+                  <ChevronDown className="size-3.5 text-travel-muted" />
+                </button>
+              </PopoverTrigger>
+              <PopoverContent align="start" className="w-auto max-w-[calc(100vw-2rem)]">
+                <Calendar
+                  disabled={(date) => isPastCalendarDate(date) || !isDateSelectableForActivity(activity, date)}
+                  mode="single"
+                  numberOfMonths={isDesktopCalendar ? 2 : 1}
+                  onSelect={(date) => {
+                    if (date) selectDate(dateToIsoDate(date));
+                  }}
+                  selected={selectedDate ? isoDateToCalendarDate(selectedDate) : undefined}
+                />
+                <p className="mt-3 max-w-md text-xs leading-5 text-travel-muted">
+                  Dates are filtered by active sessions and package availability. Package choices appear after checking availability.
+                </p>
+              </PopoverContent>
+            </Popover>
             <button
               className={`flex min-h-[58px] items-center justify-between border-t px-3 py-2.5 text-left transition hover:bg-travel-bg ${containerOutlineClass} md:border-l md:border-t-0`}
               onClick={() => setOpenPanel(openPanel === "travelers" ? null : "travelers")}
@@ -186,65 +278,24 @@ export function ActivityBookingBox({ activity }: DetailSectionProps) {
               <ChevronDown className="size-3.5 text-travel-muted" />
             </button>
 
-            {openPanel === "date" ? (
-              <div className="absolute left-0 right-0 top-[calc(100%+8px)] z-40 rounded-travel-lg border border-[#2B2B2B]/20 bg-white p-3 shadow-[0_16px_36px_rgba(26,26,26,0.14)]">
-                <p className="mb-2 font-interface text-xs font-semibold text-travel-muted">Available sessions</p>
-                {availability.length ? (
-                  <div className="grid max-h-56 gap-1 overflow-y-auto">
-                    {availability.map((slot) => {
-                      const remaining = remainingCapacity(slot);
-                      return (
-                        <button
-                          className={`rounded-travel-md px-3 py-2.5 text-left text-sm transition ${
-                            slot.id === selectedAvailability?.id
-                              ? "bg-[#FBEAE8] text-travel-primary"
-                              : "hover:bg-travel-bg"
-                          }`}
-                          key={slot.id}
-                          onClick={() => {
-                            setAvailabilityId(slot.id);
-                            if (adults + children > remaining) {
-                              setChildren(0);
-                              setAdults(Math.max(1, remaining));
-                            }
-                            setOpenPanel(null);
-                          }}
-                          type="button"
-                        >
-                          <span className="block font-medium">{formatSessionDate(slot.startDateTime)}</span>
-                          <span className="mt-0.5 block text-xs text-travel-muted">{remaining} spots left</span>
-                        </button>
-                      );
-                    })}
-                  </div>
-                ) : (
-                  <p className="text-sm text-travel-muted">No active sessions are currently available.</p>
-                )}
-              </div>
-            ) : null}
-
             {openPanel === "travelers" ? (
               <div className="absolute left-0 right-0 top-[calc(100%+8px)] z-40 rounded-travel-lg border border-[#2B2B2B]/20 bg-white p-4 shadow-[0_16px_36px_rgba(26,26,26,0.14)]">
                 <TravelerStepper
                   description="Age 14-105"
                   label="Adult"
-                  max={Math.max(1, maxTravelers - children)}
+                  max={Math.max(1, 14 - children)}
                   min={1}
-                  onChange={setAdults}
+                  onChange={updateAdults}
                   value={adults}
                 />
                 <div className="my-3 border-t border-[#2B2B2B]/10" />
                 <TravelerStepper
-                  badge={
-                    activity.pricingTiers?.length
-                      ? `-${Number(activity.pricingTiers[0]?.childDiscountPercent ?? 27)}%`
-                      : undefined
-                  }
+                  badge={childDiscountBadge}
                   description="Age 4-13"
                   label="Child"
-                  max={Math.max(0, maxTravelers - adults)}
+                  max={Math.max(0, 14 - adults)}
                   min={0}
-                  onChange={setChildren}
+                  onChange={updateChildren}
                   value={children}
                 />
                 <ButtonCTA className="mt-4" fullWidth onClick={() => setOpenPanel(null)} size="sm" type="button">
@@ -254,20 +305,13 @@ export function ActivityBookingBox({ activity }: DetailSectionProps) {
             ) : null}
           </div>
 
-          {estimate ? (
-            <div className="space-y-2 border-t border-[#2B2B2B]/10 pt-3 text-sm">
-              <PriceLine label={`Adult x ${adults}`} value={formatMoney(estimate.adultLineTotalCents, estimate.currency)} />
-              {children > 0 ? (
-                <PriceLine label={`Child x ${children}`} value={formatMoney(estimate.childLineTotalCents, estimate.currency)} />
-              ) : null}
-              <PriceLine label="Estimated total" strong value={formatMoney(estimate.totalAmountCents, estimate.currency)} />
-            </div>
-          ) : (
-            <p className="text-sm text-red-700">No pricing tier covers this group size.</p>
-          )}
+          {inlineError ? <p className="text-sm font-semibold text-red-700">{inlineError}</p> : null}
+          <p className="text-xs leading-5 text-travel-muted">
+            Select a package after checking availability.
+          </p>
 
-          <ButtonCTA disabled={!estimate || availability.length === 0} fullWidth href={checkoutHref} size="lg">
-            Book now
+          <ButtonCTA fullWidth onClick={checkAvailability} size="lg" type="button">
+            Check availability
           </ButtonCTA>
 
           <div className="space-y-4 rounded-travel-lg bg-[#F3FAF7] p-4">
@@ -284,6 +328,73 @@ export function ActivityBookingBox({ activity }: DetailSectionProps) {
           </div>
         </CardContent>
       </Card>
+
+      <Dialog
+        description={
+          selectedDate
+            ? `Available for ${formatTravelDate(selectedDate)} · ${travelerSummary(adults, children)}`
+            : travelerSummary(adults, children)
+        }
+        onClose={() => setAvailabilityModalOpen(false)}
+        open={availabilityModalOpen}
+        title="Choose your package"
+      >
+        <div className="grid gap-4">
+          {availablePackages.length ? (
+            availablePackages.map((item) => {
+              const isSelected = selectedPackage?.option.id === item.option.id;
+              const selectedSession =
+                item.sessions.find((session) => session.id === selectedModalAvailabilityId) ??
+                item.sessions[0] ??
+                null;
+
+              return (
+                <PackageOptionCard
+                  activity={activity}
+                  adults={adults}
+                  children={children}
+                  displayCurrency={displayCurrency}
+                  isSelected={isSelected}
+                  item={item}
+                  key={item.option.id}
+                  onSelect={() => {
+                    setSelectedModalOptionId(item.option.id);
+                    setSelectedModalAvailabilityId(item.sessions[0]?.id ?? "");
+                  }}
+                  onSessionChange={(availabilityId) => {
+                    setSelectedModalOptionId(item.option.id);
+                    setSelectedModalAvailabilityId(availabilityId);
+                  }}
+                  selectedDate={selectedDate}
+                  selectedSessionId={selectedSession?.id ?? ""}
+                />
+              );
+            })
+          ) : (
+            <div className="rounded-travel-lg border border-[#2B2B2B]/15 bg-travel-bg p-5 text-center">
+              <p className="font-brand text-lg font-semibold text-travel-dark">
+                No package options are available
+              </p>
+              <p className="mx-auto mt-2 max-w-md text-sm leading-6 text-travel-muted">
+                Try a different date or traveler count.
+              </p>
+            </div>
+          )}
+
+          <div className="flex flex-col-reverse gap-2 border-t border-[#2B2B2B]/10 pt-4 sm:flex-row sm:justify-end">
+            <ButtonCTA onClick={() => setAvailabilityModalOpen(false)} type="button" variant="ghost">
+              Cancel
+            </ButtonCTA>
+            <ButtonCTA
+              disabled={!checkoutHref || (selectedPackage?.option.availabilityMode === "SCHEDULED_SESSIONS" && !selectedPackageAvailability)}
+              href={checkoutHref || "#"}
+              type="button"
+            >
+              Continue to checkout
+            </ButtonCTA>
+          </div>
+        </div>
+      </Dialog>
 
       <Card className={`${containerOutlineClass} shadow-none`}>
         <CardContent className="flex items-center gap-4 p-4">
@@ -353,6 +464,191 @@ function TravelerStepper({
   );
 }
 
+type AvailablePackage = {
+  estimate: NonNullable<ReturnType<typeof calculatePricingEstimate>>;
+  option: TravelActivityOption;
+  sessions: TravelActivityAvailability[];
+};
+
+function PackageOptionCard({
+  activity,
+  adults,
+  children,
+  displayCurrency,
+  isSelected,
+  item,
+  onSelect,
+  onSessionChange,
+  selectedDate,
+  selectedSessionId
+}: {
+  activity: TravelActivity;
+  adults: number;
+  children: number;
+  displayCurrency: Parameters<typeof formatMoney>[1];
+  isSelected: boolean;
+  item: AvailablePackage;
+  onSelect: () => void;
+  onSessionChange: (availabilityId: string) => void;
+  selectedDate: string;
+  selectedSessionId: string;
+}) {
+  const { estimate, option, sessions } = item;
+  const selectedSession = sessions.find((session) => session.id === selectedSessionId) ?? sessions[0];
+
+  return (
+    <div
+      className={`rounded-travel-lg border p-4 transition ${
+        isSelected ? "border-travel-primary bg-[#FBEAE8]/45" : "border-[#2B2B2B]/15 bg-white"
+      }`}
+    >
+      <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
+        <div className="min-w-0">
+          <div className="flex flex-wrap items-center gap-2">
+            <h3 className="font-brand text-lg font-semibold text-travel-dark">{option.title}</h3>
+            <span className="rounded-full bg-travel-bg px-2.5 py-1 text-[11px] font-semibold text-travel-muted">
+              {option.availabilityMode === "ALWAYS_AVAILABLE" ? "Available every day" : "Scheduled session"}
+            </span>
+          </div>
+          {option.description ? (
+            <p className="mt-2 text-sm leading-6 text-travel-muted">{option.description}</p>
+          ) : null}
+          <div className="mt-3 flex flex-wrap gap-x-4 gap-y-1 text-xs font-medium text-travel-muted">
+            {option.durationLabel ?? activity.durationLabel ? (
+              <span>{option.durationLabel ?? activity.durationLabel}</span>
+            ) : null}
+            {option.availabilityMode === "ALWAYS_AVAILABLE" ? (
+              <>
+                <span>{formatTravelDate(selectedDate)}</span>
+                {option.dailyCapacity ? <span>Daily capacity {option.dailyCapacity}</span> : null}
+              </>
+            ) : selectedSession ? (
+              <span>{formatSessionDate(selectedSession.startDateTime)}</span>
+            ) : null}
+          </div>
+        </div>
+        <ButtonCTA onClick={onSelect} size="sm" type="button" variant={isSelected ? "primary" : "outline"}>
+          {isSelected ? "Selected" : "Select"}
+        </ButtonCTA>
+      </div>
+
+      {option.availabilityMode === "SCHEDULED_SESSIONS" && sessions.length > 1 ? (
+        <div className="mt-4 rounded-travel-md border border-[#2B2B2B]/10 bg-white p-3">
+          <p className="mb-2 text-xs font-semibold uppercase tracking-[0.08em] text-travel-muted">
+            Session time
+          </p>
+          <div className="grid gap-2">
+            {sessions.map((session) => (
+              <button
+                className={`rounded-travel-md border px-3 py-2 text-left text-sm transition ${
+                  selectedSessionId === session.id
+                    ? "border-travel-primary bg-[#FBEAE8] text-travel-primary"
+                    : "border-[#2B2B2B]/10 hover:bg-travel-bg"
+                }`}
+                key={session.id}
+                onClick={() => onSessionChange(session.id)}
+                type="button"
+              >
+                <span className="font-semibold">{formatSessionDate(session.startDateTime)}</span>
+                <span className="ml-2 text-xs text-travel-muted">{remainingCapacity(session)} spots left</span>
+              </button>
+            ))}
+          </div>
+        </div>
+      ) : null}
+
+      <div className="mt-4 grid gap-2 rounded-travel-md bg-travel-bg p-3 text-sm">
+        <PriceLine
+          label={`Adult x ${adults}`}
+          value={formatMoney(estimate.adultLineTotalCents, displayCurrency)}
+        />
+        {children > 0 ? (
+          <PriceLine
+            label={`Child x ${children}`}
+            value={formatMoney(estimate.childLineTotalCents, displayCurrency)}
+          />
+        ) : null}
+        <PriceLine
+          label="Estimated total"
+          strong
+          value={formatMoney(estimate.totalAmountCents, displayCurrency)}
+        />
+        {displayCurrency !== "USD" ? (
+          <p className="pt-1 text-xs text-travel-muted">
+            Base charge in USD: {formatMoney(estimate.totalAmountCents, "USD")}
+          </p>
+        ) : null}
+      </div>
+    </div>
+  );
+}
+
+function getAvailablePackages({
+  activity,
+  adults,
+  children,
+  selectedDate
+}: {
+  activity: TravelActivity;
+  adults: number;
+  children: number;
+  selectedDate: string;
+}): AvailablePackage[] {
+  const options = (activity.options ?? []).filter((option) => option.isActive);
+  const sourceOptions = options.length
+    ? options
+    : [
+        {
+          availability: activity.availability ?? [],
+          availabilityMode: "SCHEDULED_SESSIONS" as const,
+          dailyCapacity: null,
+          description: activity.summary,
+          durationLabel: activity.durationLabel,
+          id: activity.id,
+          isActive: true,
+          isDefault: true,
+          meetingPoint: activity.meetingPoint,
+          pricingTiers: activity.pricingTiers ?? [],
+          slug: activity.slug,
+          sortOrder: 0,
+          title: "Standard experience"
+        }
+      ];
+
+  return sourceOptions.flatMap((option) => {
+    const estimate = calculatePricingEstimate({
+      adults,
+      children,
+      pricingMode: option.pricingTiers.length ? "GROUP_TIER" : activity.pricingMode,
+      pricingTiers: option.pricingTiers.length ? option.pricingTiers : activity.pricingTiers,
+      simplePrice: { currency: activity.currency, priceCents: activity.price }
+    });
+    if (!estimate) return [];
+
+    const totalTravelers = adults + children;
+    if (option.availabilityMode === "ALWAYS_AVAILABLE") {
+      if (!isDateAllowed(selectedDate, option.availableDays)) return [];
+      if (option.dailyCapacity && totalTravelers > option.dailyCapacity) return [];
+      return [{ estimate, option, sessions: [] }];
+    }
+
+    const sessions = (option.availability ?? activity.availability ?? [])
+      .filter((session) => session.isActive)
+      .filter((session) => dateToIsoDate(new Date(session.startDateTime)) === selectedDate)
+      .filter((session) => remainingCapacity(session) >= totalTravelers);
+
+    if (!sessions.length) return [];
+    return [{ estimate, option, sessions }];
+  });
+}
+
+function firstDiscountBadge(options: TravelActivityOption[], activity: TravelActivity) {
+  const tier =
+    options.flatMap((option) => option.pricingTiers).find((item) => item.isActive) ??
+    activity.pricingTiers?.find((item) => item.isActive);
+  return tier && tier.childPriceCents != null ? `-${Number(tier.childDiscountPercent ?? 27)}%` : undefined;
+}
+
 function PriceLine({ label, value, strong = false }: { label: string; value: string; strong?: boolean }) {
   return (
     <div className={`flex items-center justify-between gap-4 ${strong ? "font-semibold text-travel-dark" : "text-travel-muted"}`}>
@@ -360,6 +656,99 @@ function PriceLine({ label, value, strong = false }: { label: string; value: str
       <span>{value}</span>
     </div>
   );
+}
+
+function todayInputValue() {
+  return new Date().toISOString().slice(0, 10);
+}
+
+function useDesktopCalendar() {
+  const [isDesktop, setIsDesktop] = useState(false);
+
+  useEffect(() => {
+    const query = window.matchMedia("(min-width: 768px)");
+    setIsDesktop(query.matches);
+
+    function onChange(event: MediaQueryListEvent) {
+      setIsDesktop(event.matches);
+    }
+
+    query.addEventListener("change", onChange);
+    return () => query.removeEventListener("change", onChange);
+  }, []);
+
+  return isDesktop;
+}
+
+function nextAvailableDate(availableDays?: string[] | null) {
+  const allowed = new Set((availableDays ?? []).map((day) => day.toUpperCase()));
+  const weekdayByIndex = ["SUNDAY", "MONDAY", "TUESDAY", "WEDNESDAY", "THURSDAY", "FRIDAY", "SATURDAY"];
+  const date = new Date();
+
+  for (let offset = 1; offset <= 14; offset += 1) {
+    const candidate = new Date(date);
+    candidate.setDate(date.getDate() + offset);
+    if (!allowed.size || allowed.has(weekdayByIndex[candidate.getDay()])) {
+      return candidate.toISOString().slice(0, 10);
+    }
+  }
+
+  return todayInputValue();
+}
+
+function isPastCalendarDate(date: Date) {
+  return dateToIsoDate(date) < todayInputValue();
+}
+
+function isDateSelectableForActivity(activity: TravelActivity, date: Date) {
+  const isoDate = dateToIsoDate(date);
+  const options = (activity.options ?? []).filter((option) => option.isActive);
+
+  if (!options.length) {
+    return (activity.availability ?? []).some(
+      (session) => session.isActive && dateToIsoDate(new Date(session.startDateTime)) === isoDate
+    );
+  }
+
+  return options.some((option) => {
+    if (option.availabilityMode === "ALWAYS_AVAILABLE") {
+      return isDateAllowed(isoDate, option.availableDays);
+    }
+
+    return option.availability.some(
+      (session) => session.isActive && dateToIsoDate(new Date(session.startDateTime)) === isoDate
+    );
+  });
+}
+
+function isDateAllowed(value: string, availableDays?: string[] | null) {
+  if (!availableDays?.length) return true;
+  const date = new Date(`${value}T00:00:00Z`);
+  if (Number.isNaN(date.getTime())) return false;
+  const allowed = new Set(availableDays.map((day) => day.toUpperCase()));
+  return allowed.has(weekdayByIndex[date.getUTCDay()]);
+}
+
+const weekdayByIndex = ["SUNDAY", "MONDAY", "TUESDAY", "WEDNESDAY", "THURSDAY", "FRIDAY", "SATURDAY"];
+
+function dateToIsoDate(date: Date) {
+  return date.toISOString().slice(0, 10);
+}
+
+function isoDateToCalendarDate(value: string) {
+  return new Date(`${value}T00:00:00Z`);
+}
+
+function formatAvailableDays(availableDays: string[]) {
+  return availableDays
+    .map((day) => day.charAt(0) + day.slice(1).toLowerCase())
+    .join(", ");
+}
+
+function formatTravelDate(value: string) {
+  return new Intl.DateTimeFormat("en-US", {
+    dateStyle: "medium"
+  }).format(new Date(`${value}T00:00:00Z`));
 }
 
 function formatSessionDate(value: string) {

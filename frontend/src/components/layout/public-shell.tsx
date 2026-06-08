@@ -6,6 +6,7 @@ import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { Search } from "lucide-react";
 import { routes } from "../../lib/routes";
+import { useCurrency } from "../providers/CurrencyProvider";
 
 type PublicShellProps = {
   children: ReactNode;
@@ -15,6 +16,7 @@ export function PublicShell({ children }: PublicShellProps) {
   const [showSearch, setShowSearch] = useState(false);
   const pathname = usePathname();
   const isActivityDetail = pathname.startsWith("/activities/");
+  const { currency, setCurrency, supportedCurrencies } = useCurrency();
 
   useEffect(() => {
     function updateSearchVisibility() {
@@ -100,6 +102,21 @@ export function PublicShell({ children }: PublicShellProps) {
           )}
 
           <nav className="ml-auto flex items-center gap-3 text-[13px] font-semibold text-travel-dark sm:gap-5">
+            <label className="relative">
+              <span className="sr-only">Display currency</span>
+              <select
+                aria-label="Display currency"
+                className="h-9 cursor-pointer rounded-travel-md border border-[#2B2B2B]/20 bg-white px-2.5 font-interface text-xs font-semibold text-travel-dark outline-none transition hover:border-travel-primary/40 focus:border-travel-primary focus:ring-2 focus:ring-travel-primary/15"
+                onChange={(event) => setCurrency(event.target.value as typeof currency)}
+                value={currency}
+              >
+                {supportedCurrencies.map((item) => (
+                  <option key={item} value={item}>
+                    {item}
+                  </option>
+                ))}
+              </select>
+            </label>
             <Link className="hidden transition hover:text-travel-primary sm:inline" href={routes.login}>
               Login
             </Link>

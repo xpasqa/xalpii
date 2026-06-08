@@ -7,7 +7,7 @@ import { getAdminCategory } from "../../../lib/admin";
 import type { AdminCategory } from "../../../lib/admin";
 import { getAdminActivities } from "../../../lib/admin-activities";
 import type { AdminActivity } from "../../../lib/admin-activities";
-import { formatMoney } from "../../../lib/money";
+import { formatBaseUsd } from "../../../lib/money";
 import { routes } from "../../../lib/routes";
 import type { ActivityStatus } from "../../../lib/partner-activities";
 import {
@@ -202,7 +202,7 @@ function formatActivityPrice(activity: AdminActivity) {
   const pricing = activity.pricing.find((item) => item.isActive) ?? activity.pricing[0];
   if (!pricing) return "No pricing";
 
-  return formatMoney(pricing.priceCents, pricing.currency);
+  return formatBaseUsd(pricing.priceCents);
 }
 
 function formatStatus(status: string) {

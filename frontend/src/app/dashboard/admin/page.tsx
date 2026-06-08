@@ -5,9 +5,9 @@ import Link from "next/link";
 
 const adminCards = [
   {
-    title: "Cities",
-    description: "Manage destination master data for marketplace discovery.",
-    href: routes.adminCities
+    title: "Destinations",
+    description: "Manage country, region, city, and area hierarchy for marketplace discovery.",
+    href: routes.adminDestinations
   },
   {
     title: "Categories",
@@ -39,7 +39,7 @@ export default function AdminDashboardPage() {
         </Card>
 
         <div className="grid gap-4 md:grid-cols-3">
-          {["Cities ready", "Categories ready", "Activity review ready"].map((label, index) => (
+          {["Destinations ready", "Categories ready", "Activity review ready"].map((label, index) => (
             <Card key={label}>
               <CardHeader>
                 <CardTitle>{index < 3 ? "Live" : "Later"}</CardTitle>

@@ -34,27 +34,51 @@ import {
 } from "../../ui";
 import { formatDate } from "../../../lib/dates";
 import { requestPresignedUpload, uploadFileToPresignedUrl } from "../../../lib/files";
-import { formatMoney } from "../../../lib/money";
+import {
+  formatBaseUsd,
+  parseUsdInputToMinor,
+  usdMinorToInput
+} from "../../../lib/money";
+import {
+  createPartnerActivityRevision,
+  getPartnerActivityRevision,
+  submitPartnerActivityRevision,
+  updatePartnerActivityRevision
+} from "../../../lib/activity-revisions";
+import type {
+  ActivityRevision,
+  ActivityRevisionSnapshot
+} from "../../../lib/activity-revisions";
 import {
   createPartnerActivity,
   createPartnerActivityAvailability,
   createPartnerActivityMedia,
+  createPartnerActivityOption,
+  createPartnerActivityOptionAvailability,
   deactivatePartnerActivityAvailability,
   deletePartnerActivityMedia,
+  deactivatePartnerActivityOption,
+  deactivatePartnerActivityOptionAvailability,
   getPartnerActivities,
   getPartnerActivity,
   getPartnerLookupCategories,
   getPartnerLookupCities,
+  getPartnerLookupDestinations,
   submitPartnerActivity,
   updatePartnerActivity,
+  updatePartnerActivityOption,
+  upsertPartnerActivityOptionPricing,
   upsertPartnerActivityPricing
 } from "../../../lib/partner-activities";
 import type {
   ActivityStatus,
+  AvailabilityMode,
   LookupCategory,
   LookupCity,
+  LookupDestination,
   PartnerActivity,
-  PartnerActivityInput
+  PartnerActivityInput,
+  PartnerActivityOption
 } from "../../../lib/partner-activities";
 import { routes } from "../../../lib/routes";
 
@@ -62,11 +86,18 @@ type BasicDetailsState = {
   title: string;
   slug: string;
   cityId: string;
+  destinationId: string;
   categoryId: string;
   shortDescription: string;
   description: string;
   durationLabel: string;
   meetingPoint: string;
+};
+
+type ActivityLookups = {
+  categories: LookupCategory[];
+  cities: LookupCity[];
+  destinations: LookupDestination[];
 };
 
 type PoliciesState = {
@@ -108,14 +139,30 @@ type PricingTierForm = {
   maxTravelers: string;
   adultPrice: string;
   childPrice: string;
+  childAllowed: boolean;
   childDiscountPercent: string;
   isActive: boolean;
 };
+
+type OptionModalState = {
+  id?: string;
+  title: string;
+  slug: string;
+  description: string;
+  durationLabel: string;
+  meetingPoint: string;
+  availabilityMode: AvailabilityMode;
+  availableDays: string[];
+  dailyCapacity: string;
+  isActive: boolean;
+  sortOrder: string;
+} | null;
 
 const emptyBasicDetails: BasicDetailsState = {
   title: "",
   slug: "",
   cityId: "",
+  destinationId: "",
   categoryId: "",
   shortDescription: "",
   description: "",
@@ -147,9 +194,11 @@ const statusOptions: Array<ActivityStatus | ""> = [
 ];
 
 export function PartnerActivityListManager() {
+  const router = useRouter();
   const [activities, setActivities] = useState<PartnerActivity[]>([]);
   const [error, setError] = useState<string | null>(null);
   const [isLoading, setIsLoading] = useState(true);
+  const [revisionActionId, setRevisionActionId] = useState<string | null>(null);
   const [search, setSearch] = useState("");
   const [status, setStatus] = useState<ActivityStatus | "">("");
 
@@ -173,6 +222,27 @@ export function PartnerActivityListManager() {
   function applyFilters(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     void loadActivities(status, search);
+  }
+
+  async function openRevision(activity: PartnerActivity) {
+    const existingRevision = activity.revisions?.[0];
+
+    if (existingRevision) {
+      router.push(routes.partnerActivityRevision(activity.id, existingRevision.id));
+      return;
+    }
+
+    setError(null);
+    setRevisionActionId(activity.id);
+
+    try {
+      const revision = await createPartnerActivityRevision(activity.id);
+      router.push(routes.partnerActivityRevision(activity.id, revision.id));
+    } catch (caughtError) {
+      setError(caughtError instanceof Error ? caughtError.message : "Unable to create revision");
+    } finally {
+      setRevisionActionId(null);
+    }
   }
 
   return (
@@ -242,23 +312,47 @@ export function PartnerActivityListManager() {
                 </div>
                 <div className="min-w-0">
                   <div className="mb-2 flex flex-wrap items-center gap-2">
-                    <Badge variant={statusVariant(activity.status)}>{formatStatus(activity.status)}</Badge>
+                  <Badge variant={statusVariant(activity.status)}>{formatStatus(activity.status)}</Badge>
+                    {activity.revisions?.[0] ? (
+                      <Badge variant={revisionVariant(activity.revisions[0].status)}>
+                        {revisionLabel(activity.revisions[0].status)}
+                      </Badge>
+                    ) : null}
                     <span className="text-xs text-travel-muted">
                       Updated {formatDate(activity.updatedAt)}
                     </span>
                   </div>
                   <p className="font-brand text-base font-semibold text-travel-dark">{activity.title}</p>
                   <p className="mt-1 text-sm text-travel-muted">
-                    {activity.city.name} · {activity.category.name}
+                    {formatActivityDestination(activity)} · {activity.category.name}
+                  </p>
+                  <p className="mt-1 text-xs text-travel-muted">
+                    {(activity.options ?? []).length} package option{(activity.options ?? []).length === 1 ? "" : "s"}
+                    {activity.status === "PUBLISHED" && activity.revisions?.[0]
+                      ? " · Public listing stays live while changes are reviewed"
+                      : ""}
                   </p>
                 </div>
                 <div className="flex flex-wrap items-center gap-3 md:justify-end">
                   <span className="font-interface text-sm font-semibold text-travel-dark">
-                    {price ? formatMoney(price.priceCents, price.currency) : "No price"}
+                    {price ? formatBaseUsd(price.priceCents) : "No price"}
                   </span>
-                  <ButtonCTA href={routes.partnerActivityEdit(activity.id)} size="sm" variant="outline">
-                    Edit
-                  </ButtonCTA>
+                  {activity.status === "PUBLISHED" ? (
+                    <ButtonCTA
+                      disabled={revisionActionId === activity.id}
+                      isLoading={revisionActionId === activity.id}
+                      onClick={() => void openRevision(activity)}
+                      size="sm"
+                      type="button"
+                      variant="outline"
+                    >
+                      {activity.revisions?.[0] ? "Continue changes" : "Edit changes"}
+                    </ButtonCTA>
+                  ) : (
+                    <ButtonCTA href={routes.partnerActivityEdit(activity.id)} size="sm" variant="outline">
+                      Edit
+                    </ButtonCTA>
+                  )}
                 </div>
               </CardContent>
             </Card>
@@ -271,9 +365,10 @@ export function PartnerActivityListManager() {
 
 export function PartnerActivityCreateManager() {
   const router = useRouter();
-  const [lookups, setLookups] = useState<{ cities: LookupCity[]; categories: LookupCategory[] }>({
+  const [lookups, setLookups] = useState<ActivityLookups>({
     categories: [],
-    cities: []
+    cities: [],
+    destinations: []
   });
   const [form, setForm] = useState<BasicDetailsState>(emptyBasicDetails);
   const [error, setError] = useState<string | null>(null);
@@ -283,14 +378,16 @@ export function PartnerActivityCreateManager() {
   useEffect(() => {
     async function loadLookups() {
       try {
-        const [cities, categories] = await Promise.all([
+        const [cities, categories, destinations] = await Promise.all([
           getPartnerLookupCities(),
-          getPartnerLookupCategories()
+          getPartnerLookupCategories(),
+          getPartnerLookupDestinations()
         ]);
-        setLookups({ cities, categories });
+        setLookups({ cities, categories, destinations });
         setForm((current) => ({
           ...current,
           cityId: cities[0]?.id ?? "",
+          destinationId: destinations[0]?.id ?? "",
           categoryId: categories[0]?.id ?? ""
         }));
       } catch (caughtError) {
@@ -311,7 +408,8 @@ export function PartnerActivityCreateManager() {
     try {
       const activity = await createPartnerActivity({
         categoryId: form.categoryId,
-        cityId: form.cityId,
+        cityId: form.cityId || undefined,
+        destinationId: form.destinationId || undefined,
         description: form.description,
         shortDescription: form.shortDescription,
         slug: form.slug || undefined,
@@ -349,7 +447,21 @@ export function PartnerActivityCreateManager() {
             <div className="grid gap-4 md:grid-cols-2">
               <Field label="Activity title" required>
                 <Input
-                  onChange={(event) => setForm({ ...form, title: event.target.value })}
+                  onChange={(event) =>
+                    setForm((current) => {
+                      const currentGeneratedSlug = slugifyForInput(current.title);
+                      const nextTitle = event.target.value;
+                      const nextGeneratedSlug = slugifyForInput(nextTitle);
+                      return {
+                        ...current,
+                        title: nextTitle,
+                        slug:
+                          !current.slug || current.slug === currentGeneratedSlug
+                            ? nextGeneratedSlug
+                            : current.slug
+                      };
+                    })
+                  }
                   placeholder="e.g. Ubud Cooking Class & Market Visit"
                   required
                   value={form.title}
@@ -357,20 +469,20 @@ export function PartnerActivityCreateManager() {
               </Field>
               <Field label="Slug optional">
                 <Input
-                  onChange={(event) => setForm({ ...form, slug: event.target.value })}
-                  placeholder="e.g. ubud-cooking-class-market-visit"
+                  onChange={(event) => setForm({ ...form, slug: slugifyForInput(event.target.value) })}
+                  placeholder="Auto-generated from title, editable for SEO"
                   value={form.slug}
                 />
               </Field>
-              <Field label="Destination / City" required>
+              <Field label="Destination" required>
                 <Select
-                  onChange={(event) => setForm({ ...form, cityId: event.target.value })}
+                  onChange={(event) => setForm({ ...form, destinationId: event.target.value })}
                   required
-                  value={form.cityId}
+                  value={form.destinationId}
                 >
-                  {lookups.cities.map((city) => (
-                    <option key={city.id} value={city.id}>
-                      {city.name}, {city.country}
+                  {lookups.destinations.map((destination) => (
+                    <option key={destination.id} value={destination.id}>
+                      {formatDestinationOption(destination)}
                     </option>
                   ))}
                 </Select>
@@ -421,10 +533,12 @@ export function PartnerActivityCreateManager() {
 }
 
 export function PartnerActivityEditManager({ activityId }: { activityId: string }) {
+  const router = useRouter();
   const [activity, setActivity] = useState<PartnerActivity | null>(null);
-  const [lookups, setLookups] = useState<{ cities: LookupCity[]; categories: LookupCategory[] }>({
+  const [lookups, setLookups] = useState<ActivityLookups>({
     categories: [],
-    cities: []
+    cities: [],
+    destinations: []
   });
   const [basic, setBasic] = useState<BasicDetailsState>(emptyBasicDetails);
   const [policies, setPolicies] = useState<PoliciesState>(emptyPolicies);
@@ -440,6 +554,7 @@ export function PartnerActivityEditManager({ activityId }: { activityId: string 
   const [itineraryModal, setItineraryModal] = useState<ItineraryModalState>(null);
   const [availabilityModal, setAvailabilityModal] = useState<AvailabilityModalState>(null);
   const [mediaUrlModal, setMediaUrlModal] = useState<MediaUrlModalState>(null);
+  const [optionModal, setOptionModal] = useState<OptionModalState>(null);
   const isEditable =
     activity ? activity.status === "DRAFT" || activity.status === "REVISION_REQUESTED" : false;
 
@@ -452,13 +567,14 @@ export function PartnerActivityEditManager({ activityId }: { activityId: string 
     setIsLoading(true);
 
     try {
-      const [nextActivity, cities, categories] = await Promise.all([
+      const [nextActivity, cities, categories, destinations] = await Promise.all([
         getPartnerActivity(activityId),
         getPartnerLookupCities(),
-        getPartnerLookupCategories()
+        getPartnerLookupCategories(),
+        getPartnerLookupDestinations()
       ]);
       hydrateActivity(nextActivity);
-      setLookups({ cities, categories });
+      setLookups({ cities, categories, destinations });
     } catch (caughtError) {
       setError(caughtError instanceof Error ? caughtError.message : "Unable to load activity");
     } finally {
@@ -497,7 +613,8 @@ export function PartnerActivityEditManager({ activityId }: { activityId: string 
     await savePartial(
       {
         categoryId: basic.categoryId,
-        cityId: basic.cityId,
+        cityId: basic.cityId || undefined,
+        destinationId: basic.destinationId || undefined,
         description: basic.description,
         durationLabel: basic.durationLabel || undefined,
         meetingPoint: basic.meetingPoint || undefined,
@@ -538,6 +655,29 @@ export function PartnerActivityEditManager({ activityId }: { activityId: string 
     }
   }
 
+  async function beginPublishedRevision() {
+    if (!activity) return;
+
+    const existingRevision = activity.revisions?.[0];
+    if (existingRevision) {
+      router.push(routes.partnerActivityRevision(activity.id, existingRevision.id));
+      return;
+    }
+
+    setError(null);
+    setSuccess(null);
+    setIsSaving(true);
+
+    try {
+      const revision = await createPartnerActivityRevision(activity.id);
+      router.push(routes.partnerActivityRevision(activity.id, revision.id));
+    } catch (caughtError) {
+      setError(caughtError instanceof Error ? caughtError.message : "Unable to create revision");
+    } finally {
+      setIsSaving(false);
+    }
+  }
+
   const readiness = useMemo(
     () =>
       activity
@@ -561,6 +701,46 @@ export function PartnerActivityEditManager({ activityId }: { activityId: string 
     return <ErrorState description={error ?? "Activity not found"} title="Activity unavailable" />;
   }
 
+  if (activity.status === "PUBLISHED") {
+    const revision = activity.revisions?.[0];
+
+    return (
+      <div className="grid gap-5">
+        <Card>
+          <CardHeader>
+            <div className="mb-2 flex flex-wrap items-center gap-2">
+              <Badge variant={statusVariant(activity.status)}>{formatStatus(activity.status)}</Badge>
+              {revision ? (
+                <Badge variant={revisionVariant(revision.status)}>
+                  {revisionLabel(revision.status)}
+                </Badge>
+              ) : null}
+            </div>
+            <CardTitle>{activity.title}</CardTitle>
+            <CardDescription>
+              This activity is published. Changes are edited as a draft revision and require admin
+              approval before the public listing changes.
+            </CardDescription>
+          </CardHeader>
+          <CardContent className="flex flex-wrap gap-3">
+            <ButtonCTA
+              disabled={isSaving}
+              isLoading={isSaving}
+              onClick={() => void beginPublishedRevision()}
+              type="button"
+            >
+              {revision ? "Continue editing changes" : "Edit changes"}
+            </ButtonCTA>
+            <ButtonCTA href={routes.partnerActivities} type="button" variant="outline">
+              Back to activities
+            </ButtonCTA>
+          </CardContent>
+        </Card>
+        {error ? <ErrorState description={error} title="Unable to start revision" /> : null}
+      </div>
+    );
+  }
+
   return (
     <div className="grid gap-5">
       <div className="rounded-travel-lg border border-[#2B2B2B]/15 bg-white p-5 shadow-sm">
@@ -574,7 +754,7 @@ export function PartnerActivityEditManager({ activityId }: { activityId: string 
             </div>
             <h1 className="font-brand text-2xl font-semibold text-travel-dark">{activity.title}</h1>
             <p className="mt-1 font-interface text-sm text-travel-muted">
-              {activity.city.name} · {activity.category.name}
+              {formatActivityDestination(activity)} · {activity.category.name}
             </p>
           </div>
           <div className="flex flex-wrap gap-2">
@@ -657,6 +837,40 @@ export function PartnerActivityEditManager({ activityId }: { activityId: string 
             onChange={setPolicies}
             onSubmit={savePolicies}
             policies={policies}
+          />
+          <ExperienceOptionsSection
+            activity={activity}
+            disabled={!isEditable || isSaving}
+            onAddOption={() =>
+              setOptionModal({
+                availabilityMode: "SCHEDULED_SESSIONS",
+                availableDays: ["MONDAY", "TUESDAY", "WEDNESDAY", "THURSDAY", "FRIDAY", "SATURDAY", "SUNDAY"],
+                dailyCapacity: "12",
+                description: "",
+                durationLabel: "",
+                isActive: true,
+                meetingPoint: "",
+                slug: "",
+                sortOrder: String((activity.options?.length ?? 0) + 1),
+                title: ""
+              })
+            }
+            onEditOption={(option) =>
+              setOptionModal({
+                availabilityMode: option.availabilityMode,
+                availableDays: option.availableDays ?? [],
+                dailyCapacity: option.dailyCapacity == null ? "" : String(option.dailyCapacity),
+                description: option.description ?? "",
+                durationLabel: option.durationLabel ?? "",
+                id: option.id,
+                isActive: option.isActive,
+                meetingPoint: option.meetingPoint ?? "",
+                slug: option.slug,
+                sortOrder: String(option.sortOrder ?? 0),
+                title: option.title
+              })
+            }
+            onUpdated={loadAll}
           />
           <PricingSection activity={activity} disabled={!isEditable || isSaving} onUpdated={loadAll} />
           <AvailabilitySection
@@ -756,6 +970,34 @@ export function PartnerActivityEditManager({ activityId }: { activityId: string 
           await loadAll();
         }}
       />
+      <OptionDialog
+        modal={optionModal}
+        onClose={() => setOptionModal(null)}
+        onSave={async (modal) => {
+          const payload = {
+            availabilityMode: modal.availabilityMode,
+            availableDays: modal.availabilityMode === "ALWAYS_AVAILABLE" ? modal.availableDays : undefined,
+            dailyCapacity:
+              modal.availabilityMode === "ALWAYS_AVAILABLE" && modal.dailyCapacity
+                ? Number(modal.dailyCapacity)
+                : undefined,
+            description: modal.description,
+            durationLabel: modal.durationLabel,
+            isActive: modal.isActive,
+            meetingPoint: modal.meetingPoint,
+            slug: modal.slug || undefined,
+            sortOrder: Number(modal.sortOrder || 0),
+            title: modal.title
+          };
+          if (modal.id) {
+            await updatePartnerActivityOption(activity.id, modal.id, payload);
+          } else {
+            await createPartnerActivityOption(activity.id, payload);
+          }
+          setOptionModal(null);
+          await loadAll();
+        }}
+      />
     </div>
   );
 }
@@ -778,6 +1020,337 @@ function PageIntro({
       <p className="mt-2 max-w-3xl font-interface text-sm leading-6 text-travel-muted">
         {description}
       </p>
+    </div>
+  );
+}
+
+export function PartnerActivityRevisionManager({
+  activityId,
+  revisionId
+}: {
+  activityId: string;
+  revisionId: string;
+}) {
+  const [revision, setRevision] = useState<ActivityRevision | null>(null);
+  const [lookups, setLookups] = useState<ActivityLookups>({
+    categories: [],
+    cities: [],
+    destinations: []
+  });
+  const [basic, setBasic] = useState<BasicDetailsState>(emptyBasicDetails);
+  const [policies, setPolicies] = useState<PoliciesState>(emptyPolicies);
+  const [highlights, setHighlights] = useState<string[]>([]);
+  const [included, setIncluded] = useState<string[]>([]);
+  const [notIncluded, setNotIncluded] = useState<string[]>([]);
+  const [itinerary, setItinerary] = useState<ItineraryStop[]>([]);
+  const [itemModal, setItemModal] = useState<ItemModalState>(null);
+  const [itineraryModal, setItineraryModal] = useState<ItineraryModalState>(null);
+  const [error, setError] = useState<string | null>(null);
+  const [success, setSuccess] = useState<string | null>(null);
+  const [isLoading, setIsLoading] = useState(true);
+  const [isSaving, setIsSaving] = useState(false);
+
+  useEffect(() => {
+    void loadRevision();
+  }, [activityId, revisionId]);
+
+  async function loadRevision() {
+    setError(null);
+    setIsLoading(true);
+
+    try {
+      const [nextRevision, cities, categories, destinations] = await Promise.all([
+        getPartnerActivityRevision(activityId, revisionId),
+        getPartnerLookupCities(),
+        getPartnerLookupCategories(),
+        getPartnerLookupDestinations()
+      ]);
+      hydrateRevision(nextRevision);
+      setLookups({ cities, categories, destinations });
+    } catch (caughtError) {
+      setError(caughtError instanceof Error ? caughtError.message : "Unable to load revision");
+    } finally {
+      setIsLoading(false);
+    }
+  }
+
+  function hydrateRevision(nextRevision: ActivityRevision) {
+    const snapshotActivity = nextRevision.snapshot.activity;
+    setRevision(nextRevision);
+    setBasic({
+      categoryId: snapshotActivity.categoryId ?? "",
+      cityId: snapshotActivity.cityId ?? "",
+      destinationId: snapshotActivity.destinationId ?? "",
+      description: snapshotActivity.description ?? "",
+      durationLabel: snapshotActivity.durationLabel ?? "",
+      meetingPoint: snapshotActivity.meetingPoint ?? "",
+      shortDescription: snapshotActivity.shortDescription ?? "",
+      slug: snapshotActivity.slug ?? "",
+      title: snapshotActivity.title ?? ""
+    });
+    setPolicies({
+      cancellationPolicy: snapshotActivity.cancellationPolicy ?? "",
+      importantInfo: snapshotActivity.importantInfo ?? ""
+    });
+    setHighlights(toStringArray(snapshotActivity.highlights));
+    setIncluded(toStringArray(snapshotActivity.included));
+    setNotIncluded(toStringArray(snapshotActivity.notIncluded));
+    setItinerary(toItineraryStops(snapshotActivity.itinerary));
+  }
+
+  async function saveSnapshot(nextSnapshot: ActivityRevisionSnapshot, message: string) {
+    if (!revision || isReadOnlyRevision(revision.status)) return;
+
+    setError(null);
+    setSuccess(null);
+    setIsSaving(true);
+
+    try {
+      const updated = await updatePartnerActivityRevision(activityId, revision.id, nextSnapshot);
+      hydrateRevision(updated);
+      setSuccess(message);
+    } catch (caughtError) {
+      setError(caughtError instanceof Error ? caughtError.message : "Unable to save revision");
+    } finally {
+      setIsSaving(false);
+    }
+  }
+
+  function snapshotWithActivity(input: Partial<ActivityRevisionSnapshot["activity"]>) {
+    if (!revision) throw new Error("Revision is not loaded");
+
+    return {
+      ...revision.snapshot,
+      activity: {
+        ...revision.snapshot.activity,
+        ...input
+      }
+    };
+  }
+
+  async function saveBasic(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    await saveSnapshot(
+      snapshotWithActivity({
+        categoryId: basic.categoryId,
+        cityId: basic.cityId,
+        destinationId: basic.destinationId || null,
+        description: basic.description,
+        durationLabel: basic.durationLabel || null,
+        meetingPoint: basic.meetingPoint || null,
+        shortDescription: basic.shortDescription,
+        slug: basic.slug,
+        title: basic.title
+      }),
+      "Revision basic details saved."
+    );
+  }
+
+  async function savePolicies(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    await saveSnapshot(
+      snapshotWithActivity({
+        cancellationPolicy: policies.cancellationPolicy || null,
+        importantInfo: policies.importantInfo || null
+      }),
+      "Revision policies saved."
+    );
+  }
+
+  async function submitRevision() {
+    if (!revision || isReadOnlyRevision(revision.status)) return;
+
+    setError(null);
+    setSuccess(null);
+    setIsSaving(true);
+
+    try {
+      const updated = await submitPartnerActivityRevision(activityId, revision.id);
+      hydrateRevision(updated);
+      setSuccess("Revision submitted for admin review.");
+    } catch (caughtError) {
+      setError(caughtError instanceof Error ? caughtError.message : "Unable to submit revision");
+    } finally {
+      setIsSaving(false);
+    }
+  }
+
+  if (isLoading) {
+    return <LoadingState label="Loading activity revision" />;
+  }
+
+  if (!revision) {
+    return <ErrorState description={error ?? "Revision not found"} title="Revision unavailable" />;
+  }
+
+  const disabled = isSaving || isReadOnlyRevision(revision.status);
+
+  return (
+    <div className="grid gap-5">
+      <Card>
+        <CardHeader className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
+          <div>
+            <div className="mb-2 flex flex-wrap items-center gap-2">
+              <Badge variant={revisionVariant(revision.status)}>{revisionLabel(revision.status)}</Badge>
+              <Badge variant="success">Live remains published</Badge>
+            </div>
+            <CardTitle>{basic.title || "Activity revision"}</CardTitle>
+            <CardDescription>
+              You are editing a draft revision. The public activity remains unchanged until admin
+              approval applies these changes.
+            </CardDescription>
+          </div>
+          <div className="flex flex-wrap gap-2">
+            <ButtonCTA
+              disabled={disabled}
+              isLoading={isSaving}
+              onClick={() => void submitRevision()}
+              size="sm"
+              type="button"
+            >
+              Submit changes for review
+            </ButtonCTA>
+            <ButtonCTA href={routes.partnerActivityEdit(activityId)} size="sm" type="button" variant="outline">
+              Back to live activity
+            </ButtonCTA>
+          </div>
+        </CardHeader>
+        {revision.status === "PENDING_REVIEW" ? (
+          <CardContent>
+            <div className="rounded-travel-md border border-amber-200 bg-amber-50 p-3 text-sm text-amber-800">
+              Waiting for admin review. Editing is locked until the revision is approved or rejected.
+            </div>
+          </CardContent>
+        ) : null}
+        {revision.status === "REJECTED" && revision.rejectionReason ? (
+          <CardContent>
+            <div className="rounded-travel-md border border-red-200 bg-red-50 p-3 text-sm text-red-800">
+              <span className="font-semibold">Revision requested:</span> {revision.rejectionReason}
+            </div>
+          </CardContent>
+        ) : null}
+      </Card>
+
+      {error ? <ErrorState description={error} title="Unable to save revision" /> : null}
+      {success ? <p className="text-sm font-semibold text-emerald-700">{success}</p> : null}
+
+      <div className="grid gap-5 xl:grid-cols-[minmax(0,1fr)_360px]">
+        <div className="grid gap-5">
+          <BasicDetailsSection
+            basic={basic}
+            disabled={disabled}
+            lookups={lookups}
+            onChange={setBasic}
+            onSubmit={saveBasic}
+          />
+          <ListSection
+            description="Short selling points travelers will scan before booking."
+            disabled={disabled}
+            emptyLabel="No highlights added yet."
+            items={highlights}
+            onAdd={() => setItemModal({ kind: "highlight", value: "" })}
+            onDelete={(index) => {
+              const next = removeAt(highlights, index);
+              void saveSnapshot(snapshotWithActivity({ highlights: next }), "Revision highlights saved.");
+            }}
+            onEdit={(index) => setItemModal({ index, kind: "highlight", value: highlights[index] ?? "" })}
+            title="Highlights"
+          />
+          <IncludesSection
+            disabled={disabled}
+            included={included}
+            notIncluded={notIncluded}
+            onAddIncluded={() => setItemModal({ kind: "included", value: "" })}
+            onAddNotIncluded={() => setItemModal({ kind: "notIncluded", value: "" })}
+            onDeleteIncluded={(index) => {
+              const next = removeAt(included, index);
+              void saveSnapshot(snapshotWithActivity({ included: next }), "Revision included items saved.");
+            }}
+            onDeleteNotIncluded={(index) => {
+              const next = removeAt(notIncluded, index);
+              void saveSnapshot(snapshotWithActivity({ notIncluded: next }), "Revision not included items saved.");
+            }}
+            onEditIncluded={(index) => setItemModal({ index, kind: "included", value: included[index] ?? "" })}
+            onEditNotIncluded={(index) =>
+              setItemModal({ index, kind: "notIncluded", value: notIncluded[index] ?? "" })
+            }
+          />
+          <ItinerarySection
+            disabled={disabled}
+            items={itinerary}
+            onAdd={() => setItineraryModal({ value: emptyItineraryStop })}
+            onDelete={(index) => {
+              const next = removeAt(itinerary, index);
+              void saveSnapshot(snapshotWithActivity({ itinerary: next }), "Revision itinerary saved.");
+            }}
+            onEdit={(index) => setItineraryModal({ index, value: itinerary[index] ?? emptyItineraryStop })}
+            onMove={(index, direction) => {
+              const next = moveItem(itinerary, index, direction);
+              void saveSnapshot(snapshotWithActivity({ itinerary: next }), "Revision itinerary saved.");
+            }}
+          />
+          <PoliciesSection
+            disabled={disabled}
+            onChange={setPolicies}
+            onSubmit={savePolicies}
+            policies={policies}
+          />
+          <RevisionOptionsSnapshotSection
+            disabled={disabled}
+            onSave={(options) =>
+              saveSnapshot({ ...revision.snapshot, options }, "Revision package options saved.")
+            }
+            options={revision.snapshot.options ?? []}
+          />
+        </div>
+        <aside className="xl:sticky xl:top-24 xl:self-start">
+          <Card>
+            <CardHeader>
+              <CardTitle>Revision status</CardTitle>
+              <CardDescription>Draft changes are isolated from the public listing.</CardDescription>
+            </CardHeader>
+            <CardContent className="grid gap-3 text-sm">
+              <StatusLine label="Current state" value={revisionLabel(revision.status)} />
+              <StatusLine label="Created" value={formatDate(revision.createdAt)} />
+              <StatusLine label="Updated" value={formatDate(revision.updatedAt)} />
+              {revision.submittedAt ? <StatusLine label="Submitted" value={formatDate(revision.submittedAt)} /> : null}
+              <div className="rounded-travel-md bg-[#FBEAE8] p-3 text-xs leading-5 text-travel-primary">
+                Public API and bookings use the live activity until admin approves and applies this revision.
+              </div>
+            </CardContent>
+          </Card>
+        </aside>
+      </div>
+
+      <ItemEditorDialog
+        modal={itemModal}
+        onClose={() => setItemModal(null)}
+        onSave={(modal) => {
+          const current =
+            modal.kind === "highlight" ? highlights : modal.kind === "included" ? included : notIncluded;
+          const next =
+            modal.index === undefined
+              ? [...current, modal.value.trim()].filter(Boolean)
+              : replaceAt(current, modal.index, modal.value.trim()).filter(Boolean);
+          setItemModal(null);
+
+          if (modal.kind === "highlight") void saveSnapshot(snapshotWithActivity({ highlights: next }), "Revision highlights saved.");
+          if (modal.kind === "included") void saveSnapshot(snapshotWithActivity({ included: next }), "Revision included items saved.");
+          if (modal.kind === "notIncluded") void saveSnapshot(snapshotWithActivity({ notIncluded: next }), "Revision not included items saved.");
+        }}
+      />
+      <ItineraryEditorDialog
+        modal={itineraryModal}
+        onClose={() => setItineraryModal(null)}
+        onSave={(modal) => {
+          const next =
+            modal.index === undefined
+              ? [...itinerary, modal.value]
+              : replaceAt(itinerary, modal.index, modal.value);
+          setItineraryModal(null);
+          void saveSnapshot(snapshotWithActivity({ itinerary: next }), "Revision itinerary saved.");
+        }}
+      />
     </div>
   );
 }
@@ -814,11 +1387,22 @@ function BasicDetailsSection({
 }: {
   basic: BasicDetailsState;
   disabled: boolean;
-  lookups: { cities: LookupCity[]; categories: LookupCategory[] };
+  lookups: ActivityLookups;
   onChange: (next: BasicDetailsState) => void;
   onSubmit: (event: FormEvent<HTMLFormElement>) => void;
 }) {
   function update(field: keyof BasicDetailsState, value: string) {
+    if (field === "title") {
+      const currentGeneratedSlug = slugifyForInput(basic.title);
+      const nextGeneratedSlug = slugifyForInput(value);
+      onChange({
+        ...basic,
+        title: value,
+        slug: !basic.slug || basic.slug === currentGeneratedSlug ? nextGeneratedSlug : basic.slug
+      });
+      return;
+    }
+
     onChange({ ...basic, [field]: value });
   }
 
@@ -835,13 +1419,18 @@ function BasicDetailsSection({
               <Input disabled={disabled} onChange={(event) => update("title", event.target.value)} required value={basic.title} />
             </Field>
             <Field label="Slug">
-              <Input disabled={disabled} onChange={(event) => update("slug", event.target.value)} placeholder="e.g. ubud-cooking-class-market-visit" value={basic.slug} />
+              <Input
+                disabled={disabled}
+                onChange={(event) => update("slug", slugifyForInput(event.target.value))}
+                placeholder="Auto-generated from title, editable for SEO"
+                value={basic.slug}
+              />
             </Field>
-            <Field label="City" required>
-              <Select disabled={disabled} onChange={(event) => update("cityId", event.target.value)} required value={basic.cityId}>
-                {lookups.cities.map((city) => (
-                  <option key={city.id} value={city.id}>
-                    {city.name}, {city.country}
+            <Field label="Destination" required>
+              <Select disabled={disabled} onChange={(event) => update("destinationId", event.target.value)} required value={basic.destinationId}>
+                {lookups.destinations.map((destination) => (
+                  <option key={destination.id} value={destination.id}>
+                    {formatDestinationOption(destination)}
                   </option>
                 ))}
               </Select>
@@ -1154,6 +1743,540 @@ function PoliciesSection({
   );
 }
 
+function RevisionOptionsSnapshotSection({
+  disabled,
+  onSave,
+  options
+}: {
+  disabled: boolean;
+  onSave: (options: PartnerActivityOption[]) => Promise<void>;
+  options: PartnerActivityOption[];
+}) {
+  const [optionDraft, setOptionDraft] = useState<PartnerActivityOption | null>(null);
+  const [tierModal, setTierModal] = useState<PricingTierForm | null>(null);
+  const [sessionModal, setSessionModal] = useState<NonNullable<AvailabilityModalState> | null>(null);
+  const [isSavingOption, setIsSavingOption] = useState(false);
+
+  const hasOptionDraft = Boolean(optionDraft);
+  const activeOptionIndex = optionDraft ? options.findIndex((item) => item.id === optionDraft.id) : -1;
+
+  function openOptionDraft(option?: PartnerActivityOption) {
+    if (option) {
+      setOptionDraft({
+        ...option,
+        pricingTiers: option.pricingTiers.map((tier) => ({ ...tier })),
+        availability: option.availability.map((slot) => ({ ...slot })),
+        availableDays: [...(option.availableDays ?? [])]
+      });
+      return;
+    }
+
+    const now = new Date().toISOString();
+    setOptionDraft({
+      activityId: "",
+      availability: [],
+      availabilityMode: "SCHEDULED_SESSIONS",
+      availableDays: ["MONDAY", "TUESDAY", "WEDNESDAY", "THURSDAY", "FRIDAY", "SATURDAY", "SUNDAY"],
+      createdAt: now,
+      dailyCapacity: 12,
+      description: "",
+      durationLabel: "",
+      id: `revision-option-${Date.now()}`,
+      isActive: true,
+      isDefault: options.length === 0,
+      meetingPoint: "",
+      pricingTiers: [],
+      slug: "",
+      sortOrder: options.length + 1,
+      title: "",
+      updatedAt: now
+    });
+  }
+
+  async function commitOptionDraft() {
+    if (!optionDraft) return;
+
+    setIsSavingOption(true);
+
+    try {
+      const nextOptions =
+        activeOptionIndex >= 0
+          ? replaceAt(options, activeOptionIndex, {
+              ...optionDraft,
+              updatedAt: new Date().toISOString()
+            })
+          : [
+              ...options,
+              {
+                ...optionDraft,
+                updatedAt: new Date().toISOString()
+              }
+            ];
+      await onSave(nextOptions);
+      setOptionDraft(null);
+    } finally {
+      setIsSavingOption(false);
+    }
+  }
+
+  function updateDraft(patch: Partial<PartnerActivityOption>) {
+    if (!optionDraft) return;
+    setOptionDraft({ ...optionDraft, ...patch });
+  }
+
+  function saveDraftTier(modal: PricingTierForm) {
+    if (!optionDraft) return;
+
+    const adultPriceCents = parseUsdInputToMinor(modal.adultPrice);
+    const childPriceCents = modal.childAllowed
+      ? modal.childPrice
+        ? parseUsdInputToMinor(modal.childPrice)
+        : Math.round(adultPriceCents * 0.73)
+      : null;
+
+    const nextTier = {
+      activityId: optionDraft.activityId,
+      adultPriceCents,
+      childDiscountPercent: childPriceCents == null ? null : 27,
+      childPriceCents,
+      createdAt: new Date().toISOString(),
+      currency: "USD",
+      id:
+        modal.index === undefined
+          ? `revision-tier-${Date.now()}`
+          : optionDraft.pricingTiers[modal.index]?.id ?? `revision-tier-${Date.now()}`,
+      isActive: modal.isActive,
+      maxTravelers: Number(modal.maxTravelers),
+      minTravelers: Number(modal.minTravelers),
+      optionId: optionDraft.id,
+      priceType: "per_person",
+      updatedAt: new Date().toISOString()
+    };
+
+    const nextPricingTiers =
+      modal.index === undefined
+        ? [...optionDraft.pricingTiers, nextTier]
+        : replaceAt(optionDraft.pricingTiers, modal.index, nextTier);
+
+    setOptionDraft({ ...optionDraft, pricingTiers: nextPricingTiers });
+    setTierModal(null);
+  }
+
+  function saveDraftSession(modal: NonNullable<AvailabilityModalState>) {
+    if (!optionDraft) return;
+
+    const nextSession = {
+      activityId: optionDraft.activityId,
+      bookedCount: 0,
+      capacity: modal.capacity ? Number(modal.capacity) : null,
+      createdAt: new Date().toISOString(),
+      endDateTime: modal.endDateTime ? new Date(modal.endDateTime).toISOString() : null,
+      id: `revision-session-${Date.now()}`,
+      isActive: modal.isActive,
+      optionId: optionDraft.id,
+      startDateTime: new Date(modal.startDateTime).toISOString(),
+      updatedAt: new Date().toISOString()
+    };
+
+    setOptionDraft({
+      ...optionDraft,
+      availability: [...optionDraft.availability, nextSession]
+    });
+    setSessionModal(null);
+  }
+
+  return (
+    <Card>
+      <CardHeader className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+        <CardTitle>Package options</CardTitle>
+        <div className="flex flex-col gap-3 sm:items-end">
+          <CardDescription>
+            Proposed package names, USD pricing tiers, and availability. Changes stay in this revision until approved.
+          </CardDescription>
+          <ButtonCTA
+            disabled={disabled}
+            leftIcon={<Plus className="size-4" />}
+            onClick={() => openOptionDraft()}
+            size="sm"
+            type="button"
+            variant="outline"
+          >
+            Add option
+          </ButtonCTA>
+        </div>
+      </CardHeader>
+      <CardContent className="grid gap-4">
+        {options.length ? (
+          options.map((option) => (
+            <div className="flex flex-col gap-3 rounded-travel-lg border border-[#2B2B2B]/15 p-4 sm:flex-row sm:items-start sm:justify-between" key={option.id}>
+              <div className="min-w-0">
+                <div className="flex flex-wrap items-center gap-2">
+                  <p className="font-interface text-sm font-semibold text-travel-dark">{option.title}</p>
+                  {option.isDefault ? <Badge variant="info">Default</Badge> : null}
+                  <Badge variant={option.isActive ? "success" : "neutral"}>
+                    {option.isActive ? "Active" : "Inactive"}
+                  </Badge>
+                </div>
+                <p className="mt-1 text-xs text-travel-muted">
+                  {option.availabilityMode === "ALWAYS_AVAILABLE" ? "Available every day" : "Scheduled sessions"}
+                  {option.durationLabel ? ` · ${option.durationLabel}` : ""}
+                </p>
+                <p className="mt-2 text-sm text-travel-muted">
+                  {getOptionFromPriceLabel(option)} · {getOptionAvailabilitySummary(option)}
+                </p>
+              </div>
+              <div className="flex shrink-0 gap-2">
+                <ButtonCTA
+                  disabled={disabled}
+                  onClick={() => openOptionDraft(option)}
+                  size="sm"
+                  type="button"
+                  variant="outline"
+                >
+                  Manage option
+                </ButtonCTA>
+              </div>
+            </div>
+          ))
+        ) : (
+          <EmptyState description="This revision has no package option snapshot." title="No package options" />
+        )}
+      </CardContent>
+
+      <Dialog
+        description="Edit one package option at a time so pricing and availability stay readable."
+        onClose={() => {
+          if (isSavingOption) return;
+          setOptionDraft(null);
+          setTierModal(null);
+          setSessionModal(null);
+        }}
+        open={hasOptionDraft}
+        title={optionDraft?.title ? optionDraft.title : "Add option"}
+      >
+        {optionDraft ? (
+          <form
+            className="grid gap-5"
+            onSubmit={(event) => {
+              event.preventDefault();
+              void commitOptionDraft();
+            }}
+          >
+            <div className="grid gap-4 sm:grid-cols-2">
+              <Field label="Option title" required>
+                <Input
+                  onChange={(event) => {
+                    const currentGeneratedSlug = slugifyForInput(optionDraft.title);
+                    const nextTitle = event.target.value;
+                    const nextGeneratedSlug = slugifyForInput(nextTitle);
+                    updateDraft({
+                      title: nextTitle,
+                      slug:
+                        !optionDraft.slug || optionDraft.slug === currentGeneratedSlug
+                          ? nextGeneratedSlug
+                          : optionDraft.slug
+                    });
+                  }}
+                  required
+                  value={optionDraft.title}
+                />
+              </Field>
+              <Field label="Slug">
+                <Input
+                  onChange={(event) => updateDraft({ slug: slugifyForInput(event.target.value) })}
+                  placeholder="Auto-generated from option name, editable for SEO"
+                  value={optionDraft.slug}
+                />
+              </Field>
+              <Field label="Availability mode" required>
+                <Select
+                  onChange={(event) =>
+                    updateDraft({
+                      availabilityMode: event.target.value as AvailabilityMode,
+                      availability:
+                        event.target.value === "ALWAYS_AVAILABLE" ? [] : optionDraft.availability
+                    })
+                  }
+                  value={optionDraft.availabilityMode}
+                >
+                  <option value="SCHEDULED_SESSIONS">Scheduled sessions</option>
+                  <option value="ALWAYS_AVAILABLE">Available every day</option>
+                </Select>
+              </Field>
+              <Field label="Sort order">
+                <Input
+                  min={0}
+                  onChange={(event) => updateDraft({ sortOrder: Number(event.target.value || 0) })}
+                  type="number"
+                  value={String(optionDraft.sortOrder)}
+                />
+              </Field>
+              <Field label="Duration override">
+                <Input
+                  onChange={(event) => updateDraft({ durationLabel: event.target.value || null })}
+                  value={optionDraft.durationLabel ?? ""}
+                />
+              </Field>
+              <Field label="Meeting point override">
+                <Input
+                  onChange={(event) => updateDraft({ meetingPoint: event.target.value || null })}
+                  value={optionDraft.meetingPoint ?? ""}
+                />
+              </Field>
+            </div>
+
+            <Field label="Option description">
+              <Textarea
+                className="min-h-24"
+                onChange={(event) => updateDraft({ description: event.target.value || null })}
+                value={optionDraft.description ?? ""}
+              />
+            </Field>
+
+            {optionDraft.availabilityMode === "ALWAYS_AVAILABLE" ? (
+              <div className="grid gap-3 rounded-travel-lg border border-[#2B2B2B]/15 p-4">
+                <div className="grid gap-4 sm:grid-cols-[1fr_180px] sm:items-start">
+                  <div>
+                    <p className="font-interface text-sm font-semibold text-travel-dark">Available days</p>
+                    <div className="mt-3 grid gap-2 sm:grid-cols-2">
+                      {weekdayOptions.map((day) => (
+                        <label className="flex items-center gap-2 text-sm text-travel-dark" key={day}>
+                          <input
+                            checked={(optionDraft.availableDays ?? []).includes(day)}
+                            onChange={(event) =>
+                              updateDraft({
+                                availableDays: event.target.checked
+                                  ? [...new Set([...(optionDraft.availableDays ?? []), day])]
+                                  : (optionDraft.availableDays ?? []).filter((item) => item !== day)
+                              })
+                            }
+                            type="checkbox"
+                          />
+                          {day.charAt(0) + day.slice(1).toLowerCase()}
+                        </label>
+                      ))}
+                    </div>
+                  </div>
+                  <Field label="Daily capacity">
+                    <Input
+                      min={1}
+                      onChange={(event) =>
+                        updateDraft({
+                          dailyCapacity: event.target.value ? Number(event.target.value) : null
+                        })
+                      }
+                      type="number"
+                      value={optionDraft.dailyCapacity == null ? "" : String(optionDraft.dailyCapacity)}
+                    />
+                  </Field>
+                </div>
+              </div>
+            ) : (
+              <div className="grid gap-3 rounded-travel-lg border border-[#2B2B2B]/15 p-4">
+                <div className="flex items-center justify-between gap-3">
+                  <div>
+                    <p className="font-interface text-sm font-semibold text-travel-dark">Scheduled sessions</p>
+                    <p className="text-sm text-travel-muted">Add fixed departures for this option.</p>
+                  </div>
+                  <ButtonCTA
+                    leftIcon={<Plus className="size-4" />}
+                    onClick={() =>
+                      setSessionModal({
+                        capacity: optionDraft.dailyCapacity == null ? "12" : String(optionDraft.dailyCapacity),
+                        endDateTime: "",
+                        isActive: true,
+                        startDateTime: ""
+                      })
+                    }
+                    size="sm"
+                    type="button"
+                    variant="outline"
+                  >
+                    Add session
+                  </ButtonCTA>
+                </div>
+                {optionDraft.availability.length ? (
+                  <div className="grid gap-2">
+                    {optionDraft.availability.map((slot, slotIndex) => (
+                      <div className="flex items-center justify-between rounded-travel-md bg-travel-bg px-3 py-3 text-sm" key={slot.id}>
+                        <div>
+                          <p className="font-medium text-travel-dark">
+                            {formatDate(slot.startDateTime, "en-US", { dateStyle: "medium", timeStyle: "short" })}
+                          </p>
+                          <p className="text-xs text-travel-muted">
+                            Capacity {slot.capacity ?? "Open"} · {slot.isActive ? "Active" : "Inactive"}
+                          </p>
+                        </div>
+                        <ButtonCTA
+                          onClick={() =>
+                            updateDraft({
+                              availability: optionDraft.availability.filter((_, index) => index !== slotIndex)
+                            })
+                          }
+                          size="sm"
+                          type="button"
+                          variant="ghost"
+                        >
+                          Remove
+                        </ButtonCTA>
+                      </div>
+                    ))}
+                  </div>
+                ) : (
+                  <p className="rounded-travel-md bg-travel-bg px-3 py-3 text-sm text-travel-muted">
+                    No scheduled sessions yet.
+                  </p>
+                )}
+              </div>
+            )}
+
+            <div className="grid gap-3 rounded-travel-lg border border-[#2B2B2B]/15 p-4">
+              <div className="flex items-center justify-between gap-3">
+                <div>
+                  <p className="font-interface text-sm font-semibold text-travel-dark">Pricing tiers</p>
+                  <p className="text-sm text-travel-muted">USD tier pricing based on traveler count.</p>
+                </div>
+                <ButtonCTA
+                  leftIcon={<Plus className="size-4" />}
+                  onClick={() =>
+                    setTierModal({
+                      adultPrice: "",
+                      childAllowed: true,
+                      childDiscountPercent: "27",
+                      childPrice: "",
+                      isActive: true,
+                      maxTravelers: "",
+                      minTravelers: ""
+                    })
+                  }
+                  size="sm"
+                  type="button"
+                  variant="outline"
+                >
+                  Add tier
+                </ButtonCTA>
+              </div>
+              {optionDraft.pricingTiers.length ? (
+                <div className="grid gap-2">
+                  {optionDraft.pricingTiers.map((tier, tierIndex) => (
+                    <div className="flex items-center justify-between rounded-travel-md bg-travel-bg px-3 py-3 text-sm" key={tier.id}>
+                      <div>
+                        <p className="font-medium text-travel-dark">
+                          {tier.minTravelers === tier.maxTravelers
+                            ? `${tier.minTravelers} traveler`
+                            : `${tier.minTravelers}-${tier.maxTravelers} travelers`}
+                        </p>
+                        <p className="text-xs text-travel-muted">
+                          Adult {formatBaseUsd(tier.adultPriceCents)} ·{" "}
+                          {tier.childPriceCents == null
+                            ? "Not available for child"
+                            : `Child ${formatBaseUsd(tier.childPriceCents)}`}
+                        </p>
+                      </div>
+                      <div className="flex gap-2">
+                        <ButtonCTA
+                          onClick={() =>
+                            setTierModal({
+                              adultPrice: usdMinorToInput(tier.adultPriceCents),
+                              childAllowed:
+                                tier.childPriceCents != null || tier.childDiscountPercent != null,
+                              childDiscountPercent: String(tier.childDiscountPercent ?? 27),
+                              childPrice: tier.childPriceCents == null ? "" : usdMinorToInput(tier.childPriceCents),
+                              index: tierIndex,
+                              isActive: tier.isActive,
+                              maxTravelers: String(tier.maxTravelers),
+                              minTravelers: String(tier.minTravelers)
+                            })
+                          }
+                          size="sm"
+                          type="button"
+                          variant="ghost"
+                        >
+                          Edit
+                        </ButtonCTA>
+                        <ButtonCTA
+                          onClick={() =>
+                            updateDraft({
+                              pricingTiers: optionDraft.pricingTiers.filter((_, index) => index !== tierIndex)
+                            })
+                          }
+                          size="sm"
+                          type="button"
+                          variant="ghost"
+                        >
+                          Remove
+                        </ButtonCTA>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              ) : (
+                <p className="rounded-travel-md bg-travel-bg px-3 py-3 text-sm text-travel-muted">
+                  No pricing tiers in this option snapshot yet.
+                </p>
+              )}
+            </div>
+
+            <label className="flex items-center gap-2 text-sm font-medium text-travel-dark">
+              <input
+                checked={optionDraft.isActive}
+                onChange={(event) => updateDraft({ isActive: event.target.checked })}
+                type="checkbox"
+              />
+              Active option
+            </label>
+
+            <DialogActions
+              isSaving={isSavingOption}
+              onCancel={() => {
+                if (isSavingOption) return;
+                setOptionDraft(null);
+                setTierModal(null);
+                setSessionModal(null);
+              }}
+              submitLabel="Save option"
+            />
+          </form>
+        ) : null}
+      </Dialog>
+
+      <OptionTierDialog
+        modal={hasOptionDraft && tierModal ? { ...tierModal, optionId: optionDraft?.id ?? "" } : null}
+        onClose={() => setTierModal(null)}
+        onSave={async (modal) => {
+          saveDraftTier(modal);
+        }}
+      />
+      <OptionAvailabilityDialog
+        modal={hasOptionDraft && sessionModal ? { ...sessionModal, optionId: optionDraft?.id ?? "" } : null}
+        onClose={() => setSessionModal(null)}
+        onSave={async (modal) => {
+          saveDraftSession(modal);
+        }}
+      />
+    </Card>
+  );
+}
+
+function getOptionFromPriceLabel(option: PartnerActivityOption) {
+  const activeTier = option.pricingTiers.find((tier) => tier.isActive) ?? option.pricingTiers[0];
+  if (!activeTier) {
+    return "No pricing yet";
+  }
+
+  return `From ${formatBaseUsd(activeTier.adultPriceCents)}`;
+}
+
+function getOptionAvailabilitySummary(option: PartnerActivityOption) {
+  if (option.availabilityMode === "ALWAYS_AVAILABLE") {
+    return `Every day${option.dailyCapacity ? ` · Capacity ${option.dailyCapacity}` : ""}`;
+  }
+
+  return option.availability.length
+    ? `${option.availability.length} scheduled session${option.availability.length === 1 ? "" : "s"}`
+    : "No scheduled sessions";
+}
+
 function PricingSection({
   activity,
   disabled,
@@ -1165,14 +2288,14 @@ function PricingSection({
 }) {
   const activePrice = activity.pricing.find((price) => price.isActive) ?? activity.pricing[0];
   const [pricingMode, setPricingMode] = useState(activity.pricingMode ?? "SIMPLE");
-  const [currency, setCurrency] = useState(activePrice?.currency ?? activity.pricingTiers?.[0]?.currency ?? "USD");
-  const [majorPrice, setMajorPrice] = useState(activePrice ? centsToMajor(activePrice.priceCents, activePrice.currency) : "");
+  const currency = "USD";
+  const [majorPrice, setMajorPrice] = useState(activePrice ? usdMinorToInput(activePrice.priceCents) : "");
   const [priceType, setPriceType] = useState(activePrice?.priceType ?? "per_person");
   const [tiers, setTiers] = useState(activity.pricingTiers ?? []);
   const [tierModal, setTierModal] = useState<PricingTierForm | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [isSaving, setIsSaving] = useState(false);
-  const previewCents = parseMoneyToCents(majorPrice, currency);
+  const previewCents = parseUsdInputToMinor(majorPrice);
 
   useEffect(() => {
     setPricingMode(activity.pricingMode ?? "SIMPLE");
@@ -1195,6 +2318,7 @@ function PricingSection({
           pricingMode === "GROUP_TIER"
             ? tiers.map((tier) => ({
                 adultPriceCents: tier.adultPriceCents,
+                childAllowed: tier.childPriceCents != null || tier.childDiscountPercent != null,
                 childDiscountPercent: Number(tier.childDiscountPercent ?? 27),
                 childPriceCents: tier.childPriceCents ?? undefined,
                 isActive: tier.isActive,
@@ -1232,8 +2356,11 @@ function PricingSection({
                 <option value="GROUP_TIER">Group tier pricing</option>
               </Select>
             </Field>
-            <Field label="Currency" required>
-              <Input disabled={disabled} onChange={(event) => setCurrency(event.target.value.toUpperCase())} required value={currency} />
+            <Field
+              label="Base currency"
+              hint="All prices are entered in USD. Customers can view converted prices in IDR, EUR, or CHF."
+            >
+              <Input disabled readOnly value="USD" />
             </Field>
             <Field label="Price type" required>
               <Select disabled={disabled} onChange={(event) => setPriceType(event.target.value)} required value={priceType}>
@@ -1243,7 +2370,7 @@ function PricingSection({
           </div>
 
           {pricingMode === "SIMPLE" ? (
-            <Field label="Adult price" required hint="Use normal currency units, e.g. 48.00.">
+            <Field label="Adult price (USD)" required hint="Enter normal USD units, e.g. 48.00.">
               <Input disabled={disabled} min={0} onChange={(event) => setMajorPrice(event.target.value)} required step="0.01" type="number" value={majorPrice} />
             </Field>
           ) : (
@@ -1257,28 +2384,12 @@ function PricingSection({
                 </div>
                 <div className="flex gap-2">
                   <ButtonCTA
-                    disabled={disabled || tiers.length === 0}
-                    onClick={() =>
-                      setTiers((current) =>
-                        current.map((tier) => ({
-                          ...tier,
-                          childDiscountPercent: 27,
-                          childPriceCents: Math.round(tier.adultPriceCents * 0.73)
-                        }))
-                      )
-                    }
-                    size="sm"
-                    type="button"
-                    variant="ghost"
-                  >
-                    Apply 27% child discount
-                  </ButtonCTA>
-                  <ButtonCTA
                     disabled={disabled}
                     leftIcon={<Plus className="size-4" />}
                     onClick={() =>
                       setTierModal({
                         adultPrice: "",
+                        childAllowed: true,
                         childDiscountPercent: "27",
                         childPrice: "",
                         isActive: true,
@@ -1300,25 +2411,31 @@ function PricingSection({
                   <span>Travelers</span>
                   <span>Adult</span>
                   <span>Child</span>
-                  <span>Discount</span>
+                  <span>Child policy</span>
                   <span>Actions</span>
                 </div>
                 {tiers.length ? (
                   tiers.map((tier, index) => (
                     <div className="grid grid-cols-[1fr_1fr_1fr_1fr_auto] items-center gap-3 border-t border-[#2B2B2B]/10 px-4 py-3 text-sm" key={tier.id ?? `${tier.minTravelers}-${tier.maxTravelers}`}>
                       <span>{tier.minTravelers === tier.maxTravelers ? tier.minTravelers : `${tier.minTravelers}-${tier.maxTravelers}`}</span>
-                      <span>{formatMoney(tier.adultPriceCents, tier.currency || currency)}</span>
-                      <span>{formatMoney(tier.childPriceCents ?? Math.round(tier.adultPriceCents * 0.73), tier.currency || currency)}</span>
-                      <span>{Number(tier.childDiscountPercent ?? 27)}%</span>
+                      <span>{formatBaseUsd(tier.adultPriceCents)}</span>
+                      <span>
+                        {tier.childPriceCents == null
+                          ? "Not available"
+                          : formatBaseUsd(tier.childPriceCents)}
+                      </span>
+                      <span>{tier.childPriceCents == null ? "No child" : "Allowed"}</span>
                       <div className="flex gap-1">
                         <IconButton
                           disabled={disabled}
                           label="Edit pricing tier"
                           onClick={() =>
                             setTierModal({
-                              adultPrice: centsToMajor(tier.adultPriceCents, currency),
+                              adultPrice: usdMinorToInput(tier.adultPriceCents),
+                              childAllowed:
+                                tier.childPriceCents != null || tier.childDiscountPercent != null,
                               childDiscountPercent: String(tier.childDiscountPercent ?? 27),
-                              childPrice: tier.childPriceCents == null ? "" : centsToMajor(tier.childPriceCents, currency),
+                              childPrice: tier.childPriceCents == null ? "" : usdMinorToInput(tier.childPriceCents),
                               index,
                               isActive: tier.isActive,
                               maxTravelers: String(tier.maxTravelers),
@@ -1349,7 +2466,7 @@ function PricingSection({
             </ButtonCTA>
             {pricingMode === "SIMPLE" ? (
               <span className="text-sm text-travel-muted">
-                Current price: {previewCents ? formatMoney(previewCents, currency) : "No price"} {formatPriceType(priceType)}
+                Current price: {previewCents ? formatBaseUsd(previewCents) : "No price"} {formatPriceType(priceType)}
               </span>
             ) : null}
           </div>
@@ -1357,7 +2474,7 @@ function PricingSection({
         </form>
       </CardContent>
       <Dialog
-        description="Prices are per traveler and stored in minor units after saving."
+        description="Enter prices in USD. Alpii stores USD cents and converts display prices for customers."
         onClose={() => setTierModal(null)}
         open={Boolean(tierModal)}
         title={tierModal?.index === undefined ? "Add pricing tier" : "Edit pricing tier"}
@@ -1367,16 +2484,18 @@ function PricingSection({
             className="grid gap-4"
             onSubmit={(event) => {
               event.preventDefault();
-              const discount = Number(tierModal.childDiscountPercent || 27);
-              const adultPriceCents = parseMoneyToCents(tierModal.adultPrice, currency);
-              const childPriceCents = tierModal.childPrice
-                ? parseMoneyToCents(tierModal.childPrice, currency)
-                : Math.round(adultPriceCents * (1 - discount / 100));
+              const adultPriceCents = parseUsdInputToMinor(tierModal.adultPrice);
+              const childPriceCents = tierModal.childAllowed
+                ? tierModal.childPrice
+                  ? parseUsdInputToMinor(tierModal.childPrice)
+                  : Math.round(adultPriceCents * 0.73)
+                : null;
               const next = {
                 activityId: activity.id,
                 adultPriceCents,
-                childDiscountPercent: discount,
-                childPriceCents,
+                childAllowed: tierModal.childAllowed,
+                childDiscountPercent: 27,
+                childPriceCents: childPriceCents ?? undefined,
                 createdAt: "",
                 currency,
                 id: tierModal.index === undefined ? `draft-${Date.now()}` : tiers[tierModal.index].id,
@@ -1401,16 +2520,37 @@ function PricingSection({
               <Field label="Max travelers" required>
                 <Input max={14} min={1} onChange={(event) => setTierModal({ ...tierModal, maxTravelers: event.target.value })} required type="number" value={tierModal.maxTravelers} />
               </Field>
-              <Field label={`Adult price (${currency})`} required>
+              <Field label="Adult price (USD)" required>
                 <Input min={0} onChange={(event) => setTierModal({ ...tierModal, adultPrice: event.target.value })} required step="0.01" type="number" value={tierModal.adultPrice} />
               </Field>
-              <Field label={`Child price (${currency})`} hint="Leave empty to derive it from the discount.">
-                <Input min={0} onChange={(event) => setTierModal({ ...tierModal, childPrice: event.target.value })} step="0.01" type="number" value={tierModal.childPrice} />
-              </Field>
-              <Field label="Child discount percent">
-                <Input max={100} min={0} onChange={(event) => setTierModal({ ...tierModal, childDiscountPercent: event.target.value })} type="number" value={tierModal.childDiscountPercent} />
+              <Field
+                label="Child price (USD)"
+                hint={tierModal.childAllowed ? "Leave empty to use the default child price." : "This option tier is blocked for child travelers."}
+              >
+                <Input
+                  disabled={!tierModal.childAllowed}
+                  min={0}
+                  onChange={(event) => setTierModal({ ...tierModal, childPrice: event.target.value })}
+                  step="0.01"
+                  type="number"
+                  value={tierModal.childPrice}
+                />
               </Field>
             </div>
+            <label className="flex items-center gap-2 text-sm font-medium text-travel-dark">
+              <input
+                checked={tierModal.childAllowed}
+                onChange={(event) =>
+                  setTierModal({
+                    ...tierModal,
+                    childAllowed: event.target.checked,
+                    childPrice: event.target.checked ? tierModal.childPrice : ""
+                  })
+                }
+                type="checkbox"
+              />
+              Available for child travelers
+            </label>
             <label className="flex items-center gap-2 text-sm font-medium text-travel-dark">
               <input checked={tierModal.isActive} onChange={(event) => setTierModal({ ...tierModal, isActive: event.target.checked })} type="checkbox" />
               Active tier
@@ -1419,6 +2559,238 @@ function PricingSection({
           </form>
         ) : null}
       </Dialog>
+    </Card>
+  );
+}
+
+function ExperienceOptionsSection({
+  activity,
+  disabled,
+  onAddOption,
+  onEditOption,
+  onUpdated
+}: {
+  activity: PartnerActivity;
+  disabled: boolean;
+  onAddOption: () => void;
+  onEditOption: (option: PartnerActivityOption) => void;
+  onUpdated: () => Promise<void>;
+}) {
+  const options = activity.options ?? [];
+  const [tierModal, setTierModal] = useState<(PricingTierForm & { optionId: string }) | null>(null);
+  const [sessionModal, setSessionModal] = useState<(NonNullable<AvailabilityModalState> & { optionId: string }) | null>(null);
+  const [error, setError] = useState<string | null>(null);
+
+  async function saveTier(modal: PricingTierForm & { optionId: string }) {
+    const option = options.find((item) => item.id === modal.optionId);
+    if (!option) return;
+    const adultPriceCents = parseUsdInputToMinor(modal.adultPrice);
+    const childPriceCents = modal.childAllowed
+      ? modal.childPrice
+        ? parseUsdInputToMinor(modal.childPrice)
+        : Math.round(adultPriceCents * 0.73)
+      : null;
+    const tier = {
+      adultPriceCents,
+      childAllowed: modal.childAllowed,
+      childDiscountPercent: 27,
+      childPriceCents: childPriceCents ?? undefined,
+      isActive: modal.isActive,
+      maxTravelers: Number(modal.maxTravelers),
+      minTravelers: Number(modal.minTravelers)
+    };
+    const currentTiers = option.pricingTiers.map((item) => ({
+              adultPriceCents: item.adultPriceCents,
+              childAllowed: item.childPriceCents != null || item.childDiscountPercent != null,
+              childDiscountPercent: Number(item.childDiscountPercent ?? 27),
+              childPriceCents: item.childPriceCents ?? undefined,
+      isActive: item.isActive,
+      maxTravelers: item.maxTravelers,
+      minTravelers: item.minTravelers
+    }));
+    const tiers =
+      modal.index === undefined
+        ? [...currentTiers, tier]
+        : replaceAt(currentTiers, modal.index, tier);
+
+    setError(null);
+    try {
+      await upsertPartnerActivityOptionPricing(activity.id, option.id, {
+        currency: "USD",
+        priceType: "per_person",
+        tiers
+      });
+      setTierModal(null);
+      await onUpdated();
+    } catch (caughtError) {
+      setError(caughtError instanceof Error ? caughtError.message : "Unable to save option pricing");
+    }
+  }
+
+  return (
+    <Card>
+      <CardHeader className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+        <div>
+          <CardTitle>Experience options</CardTitle>
+          <CardDescription>
+            Package variants with their own availability mode and USD tier pricing.
+          </CardDescription>
+        </div>
+        <ButtonCTA disabled={disabled} leftIcon={<Plus className="size-4" />} onClick={onAddOption} size="sm" type="button" variant="outline">
+          Add option
+        </ButtonCTA>
+      </CardHeader>
+      <CardContent className="grid gap-4">
+        {error ? <p className="text-sm font-medium text-red-700">{error}</p> : null}
+        {options.length ? (
+          options.map((option) => (
+            <div className="rounded-travel-lg border border-[#2B2B2B]/15 p-4" key={option.id}>
+              <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+                <div>
+                  <div className="flex flex-wrap items-center gap-2">
+                    <p className="font-interface text-sm font-semibold text-travel-dark">{option.title}</p>
+                    {option.isDefault ? <Badge variant="info">Default</Badge> : null}
+                    <Badge variant={option.isActive ? "success" : "neutral"}>{option.isActive ? "Active" : "Inactive"}</Badge>
+                  </div>
+                  <p className="mt-1 text-xs text-travel-muted">
+                    {option.availabilityMode === "ALWAYS_AVAILABLE" ? "Available every day" : "Scheduled sessions"}
+                    {option.durationLabel ? ` · ${option.durationLabel}` : ""}
+                  </p>
+                </div>
+                <div className="flex flex-wrap gap-2">
+                  <ButtonCTA disabled={disabled} onClick={() => onEditOption(option)} size="sm" type="button" variant="outline">
+                    Edit option
+                  </ButtonCTA>
+                  <ButtonCTA disabled={disabled || !option.isActive} onClick={async () => { await deactivatePartnerActivityOption(activity.id, option.id); await onUpdated(); }} size="sm" type="button" variant="ghost">
+                    Deactivate
+                  </ButtonCTA>
+                </div>
+              </div>
+
+              <div className="mt-4 grid gap-4 lg:grid-cols-2">
+                <div>
+                  <div className="mb-2 flex items-center justify-between">
+                    <p className="text-xs font-semibold uppercase tracking-[0.08em] text-travel-muted">Pricing tiers</p>
+                    <ButtonCTA
+                      disabled={disabled}
+                      onClick={() =>
+                        setTierModal({
+                          adultPrice: "",
+                          childAllowed: true,
+                          childDiscountPercent: "27",
+                          childPrice: "",
+                          isActive: true,
+                          maxTravelers: "",
+                          minTravelers: "",
+                          optionId: option.id
+                        })
+                      }
+                      size="sm"
+                      type="button"
+                      variant="ghost"
+                    >
+                      Add tier
+                    </ButtonCTA>
+                  </div>
+                  {option.pricingTiers.length ? (
+                    <div className="grid gap-2">
+                      {option.pricingTiers.map((tier, index) => (
+                        <div className="flex items-center justify-between rounded-travel-md bg-travel-bg px-3 py-2 text-sm" key={tier.id}>
+                          <span>
+                            {tier.minTravelers === tier.maxTravelers ? tier.minTravelers : `${tier.minTravelers}-${tier.maxTravelers}`} travelers
+                          </span>
+                          <span className="font-semibold text-travel-dark">
+                            {formatBaseUsd(tier.adultPriceCents)} adult ·{" "}
+                            {tier.childPriceCents == null
+                              ? "No child"
+                              : `${formatBaseUsd(tier.childPriceCents)} child`}
+                          </span>
+                          <button
+                            className="text-xs font-semibold text-travel-primary"
+                            disabled={disabled}
+                            onClick={() =>
+                              setTierModal({
+                                adultPrice: usdMinorToInput(tier.adultPriceCents),
+                                childAllowed:
+                                  tier.childPriceCents != null || tier.childDiscountPercent != null,
+                                childDiscountPercent: String(tier.childDiscountPercent ?? 27),
+                                childPrice: tier.childPriceCents == null ? "" : usdMinorToInput(tier.childPriceCents),
+                                index,
+                                isActive: tier.isActive,
+                                maxTravelers: String(tier.maxTravelers),
+                                minTravelers: String(tier.minTravelers),
+                                optionId: option.id
+                              })
+                            }
+                            type="button"
+                          >
+                            Edit
+                          </button>
+                        </div>
+                      ))}
+                    </div>
+                  ) : (
+                    <p className="rounded-travel-md bg-travel-bg px-3 py-3 text-sm text-travel-muted">No option pricing yet.</p>
+                  )}
+                </div>
+
+                <div>
+                  <div className="mb-2 flex items-center justify-between">
+                    <p className="text-xs font-semibold uppercase tracking-[0.08em] text-travel-muted">Availability</p>
+                    {option.availabilityMode === "SCHEDULED_SESSIONS" ? (
+                      <ButtonCTA
+                        disabled={disabled}
+                        onClick={() => setSessionModal({ capacity: "12", endDateTime: "", isActive: true, optionId: option.id, startDateTime: "" })}
+                        size="sm"
+                        type="button"
+                        variant="ghost"
+                      >
+                        Add session
+                      </ButtonCTA>
+                    ) : null}
+                  </div>
+                  {option.availabilityMode === "ALWAYS_AVAILABLE" ? (
+                    <p className="rounded-travel-md bg-travel-bg px-3 py-3 text-sm text-travel-muted">
+                      Days: {(option.availableDays ?? []).join(", ") || "Every day"} · Daily capacity: {option.dailyCapacity ?? "Open"}
+                    </p>
+                  ) : option.availability.length ? (
+                    <div className="grid gap-2">
+                      {option.availability.map((slot) => (
+                        <div className="flex items-center justify-between rounded-travel-md bg-travel-bg px-3 py-2 text-sm" key={slot.id}>
+                          <span>{formatDate(slot.startDateTime, "en-US", { dateStyle: "medium", timeStyle: "short" })}</span>
+                          <ButtonCTA disabled={disabled || !slot.isActive} onClick={async () => { await deactivatePartnerActivityOptionAvailability(activity.id, option.id, slot.id); await onUpdated(); }} size="sm" type="button" variant="ghost">
+                            Deactivate
+                          </ButtonCTA>
+                        </div>
+                      ))}
+                    </div>
+                  ) : (
+                    <p className="rounded-travel-md bg-travel-bg px-3 py-3 text-sm text-travel-muted">No scheduled sessions yet.</p>
+                  )}
+                </div>
+              </div>
+            </div>
+          ))
+        ) : (
+          <EmptyState description="Add at least one package option for new booking flows." title="No options yet" />
+        )}
+      </CardContent>
+
+      <OptionTierDialog modal={tierModal} onClose={() => setTierModal(null)} onSave={saveTier} />
+      <OptionAvailabilityDialog
+        modal={sessionModal}
+        onClose={() => setSessionModal(null)}
+        onSave={async (modal) => {
+          await createPartnerActivityOptionAvailability(activity.id, modal.optionId, {
+            capacity: modal.capacity ? Number(modal.capacity) : undefined,
+            endDateTime: modal.endDateTime || undefined,
+            isActive: modal.isActive,
+            startDateTime: modal.startDateTime
+          });
+          setSessionModal(null);
+          await onUpdated();
+        }}
+      />
     </Card>
   );
 }
@@ -1812,6 +3184,246 @@ function AvailabilityDialog({
   );
 }
 
+const weekdayOptions = [
+  "MONDAY",
+  "TUESDAY",
+  "WEDNESDAY",
+  "THURSDAY",
+  "FRIDAY",
+  "SATURDAY",
+  "SUNDAY"
+];
+
+function OptionDialog({
+  modal,
+  onClose,
+  onSave
+}: {
+  modal: OptionModalState;
+  onClose: () => void;
+  onSave: (modal: NonNullable<OptionModalState>) => Promise<void>;
+}) {
+  const [value, setValue] = useState<NonNullable<OptionModalState> | null>(modal);
+
+  useEffect(() => {
+    setValue(modal);
+  }, [modal]);
+
+  return (
+    <Dialog
+      description="Package variants can use scheduled sessions or an always-available daily schedule."
+      onClose={onClose}
+      open={Boolean(modal)}
+      title={modal?.id ? "Edit option" : "Add option"}
+    >
+      {value ? (
+        <form
+          className="grid gap-4"
+          onSubmit={(event) => {
+            event.preventDefault();
+            void onSave(value);
+          }}
+        >
+          <div className="grid gap-4 sm:grid-cols-2">
+            <Field label="Option name" required>
+              <Input
+                onChange={(event) => {
+                  const currentGeneratedSlug = slugifyForInput(value.title);
+                  const nextTitle = event.target.value;
+                  const nextGeneratedSlug = slugifyForInput(nextTitle);
+                  setValue({
+                    ...value,
+                    title: nextTitle,
+                    slug:
+                      !value.slug || value.slug === currentGeneratedSlug
+                        ? nextGeneratedSlug
+                        : value.slug
+                  });
+                }}
+                required
+                value={value.title}
+              />
+            </Field>
+            <Field label="Slug">
+              <Input
+                onChange={(event) => setValue({ ...value, slug: slugifyForInput(event.target.value) })}
+                placeholder="Auto-generated from option name, editable for SEO"
+                value={value.slug}
+              />
+            </Field>
+            <Field label="Availability mode" required>
+              <Select onChange={(event) => setValue({ ...value, availabilityMode: event.target.value as AvailabilityMode })} value={value.availabilityMode}>
+                <option value="SCHEDULED_SESSIONS">Scheduled sessions</option>
+                <option value="ALWAYS_AVAILABLE">Available every day</option>
+              </Select>
+            </Field>
+            <Field label="Sort order">
+              <Input min={0} onChange={(event) => setValue({ ...value, sortOrder: event.target.value })} type="number" value={value.sortOrder} />
+            </Field>
+            <Field label="Duration">
+              <Input onChange={(event) => setValue({ ...value, durationLabel: event.target.value })} value={value.durationLabel} />
+            </Field>
+            <Field label="Daily capacity">
+              <Input disabled={value.availabilityMode !== "ALWAYS_AVAILABLE"} min={1} onChange={(event) => setValue({ ...value, dailyCapacity: event.target.value })} type="number" value={value.dailyCapacity} />
+            </Field>
+          </div>
+          <Field label="Description">
+            <Textarea onChange={(event) => setValue({ ...value, description: event.target.value })} rows={3} value={value.description} />
+          </Field>
+          <Field label="Meeting point override">
+            <Input onChange={(event) => setValue({ ...value, meetingPoint: event.target.value })} value={value.meetingPoint} />
+          </Field>
+          {value.availabilityMode === "ALWAYS_AVAILABLE" ? (
+            <div className="grid gap-2">
+              <p className="text-sm font-semibold text-travel-dark">Available days</p>
+              <div className="grid gap-2 sm:grid-cols-2">
+                {weekdayOptions.map((day) => (
+                  <label className="flex items-center gap-2 text-sm text-travel-dark" key={day}>
+                    <input
+                      checked={value.availableDays.includes(day)}
+                      onChange={(event) =>
+                        setValue({
+                          ...value,
+                          availableDays: event.target.checked
+                            ? [...value.availableDays, day]
+                            : value.availableDays.filter((item) => item !== day)
+                        })
+                      }
+                      type="checkbox"
+                    />
+                    {day.charAt(0) + day.slice(1).toLowerCase()}
+                  </label>
+                ))}
+              </div>
+            </div>
+          ) : null}
+          <label className="flex items-center gap-2 text-sm font-medium text-travel-dark">
+            <input checked={value.isActive} onChange={(event) => setValue({ ...value, isActive: event.target.checked })} type="checkbox" />
+            Active option
+          </label>
+          <DialogActions onCancel={onClose} submitLabel="Save option" />
+        </form>
+      ) : null}
+    </Dialog>
+  );
+}
+
+function OptionTierDialog({
+  modal,
+  onClose,
+  onSave
+}: {
+  modal: (PricingTierForm & { optionId: string }) | null;
+  onClose: () => void;
+  onSave: (modal: PricingTierForm & { optionId: string }) => Promise<void>;
+}) {
+  const [value, setValue] = useState<typeof modal>(modal);
+
+  useEffect(() => {
+    setValue(modal);
+  }, [modal]);
+
+  return (
+    <Dialog onClose={onClose} open={Boolean(modal)} title={modal?.index === undefined ? "Add option tier" : "Edit option tier"}>
+      {value ? (
+        <form
+          className="grid gap-4"
+          onSubmit={(event) => {
+            event.preventDefault();
+            void onSave(value);
+          }}
+        >
+          <div className="grid gap-4 sm:grid-cols-2">
+            <Field label="Min travelers" required>
+              <Input max={14} min={1} onChange={(event) => setValue({ ...value, minTravelers: event.target.value })} required type="number" value={value.minTravelers} />
+            </Field>
+            <Field label="Max travelers" required>
+              <Input max={14} min={1} onChange={(event) => setValue({ ...value, maxTravelers: event.target.value })} required type="number" value={value.maxTravelers} />
+            </Field>
+            <Field label="Adult price (USD)" required>
+              <Input min={0} onChange={(event) => setValue({ ...value, adultPrice: event.target.value })} required step="0.01" type="number" value={value.adultPrice} />
+            </Field>
+            <Field label="Child price (USD)">
+              <Input
+                disabled={!value.childAllowed}
+                min={0}
+                onChange={(event) => setValue({ ...value, childPrice: event.target.value })}
+                step="0.01"
+                type="number"
+                value={value.childPrice}
+              />
+            </Field>
+          </div>
+          <label className="flex items-center gap-2 text-sm font-medium text-travel-dark">
+            <input
+              checked={value.childAllowed}
+              onChange={(event) =>
+                setValue({
+                  ...value,
+                  childAllowed: event.target.checked,
+                  childPrice: event.target.checked ? value.childPrice : ""
+                })
+              }
+              type="checkbox"
+            />
+            Available for child travelers
+          </label>
+          <label className="flex items-center gap-2 text-sm font-medium text-travel-dark">
+            <input checked={value.isActive} onChange={(event) => setValue({ ...value, isActive: event.target.checked })} type="checkbox" />
+            Active tier
+          </label>
+          <DialogActions onCancel={onClose} submitLabel="Save tier" />
+        </form>
+      ) : null}
+    </Dialog>
+  );
+}
+
+function OptionAvailabilityDialog({
+  modal,
+  onClose,
+  onSave
+}: {
+  modal: (NonNullable<AvailabilityModalState> & { optionId: string }) | null;
+  onClose: () => void;
+  onSave: (modal: NonNullable<AvailabilityModalState> & { optionId: string }) => Promise<void>;
+}) {
+  const [value, setValue] = useState<typeof modal>(modal);
+
+  useEffect(() => {
+    setValue(modal);
+  }, [modal]);
+
+  return (
+    <Dialog description="Add a scheduled session for this package option." onClose={onClose} open={Boolean(modal)} title="Add option session">
+      {value ? (
+        <form
+          className="grid gap-4"
+          onSubmit={(event) => {
+            event.preventDefault();
+            void onSave(value);
+          }}
+        >
+          <Field label="Start date/time" required>
+            <Input onChange={(event) => setValue({ ...value, startDateTime: event.target.value })} required type="datetime-local" value={value.startDateTime} />
+          </Field>
+          <Field label="End date/time">
+            <Input onChange={(event) => setValue({ ...value, endDateTime: event.target.value })} type="datetime-local" value={value.endDateTime} />
+          </Field>
+          <Field label="Capacity">
+            <Input min={1} onChange={(event) => setValue({ ...value, capacity: event.target.value })} type="number" value={value.capacity} />
+          </Field>
+          <label className="flex items-center gap-2 text-sm font-medium text-travel-dark">
+            <input checked={value.isActive} onChange={(event) => setValue({ ...value, isActive: event.target.checked })} type="checkbox" />
+            Active session
+          </label>
+          <DialogActions onCancel={onClose} submitLabel="Add session" />
+        </form>
+      ) : null}
+    </Dialog>
+  );
+}
+
 function MediaUrlDialog({
   modal,
   onClose,
@@ -1909,10 +3521,19 @@ function IconButton({
   );
 }
 
+function slugifyForInput(value: string) {
+  return value
+    .toLowerCase()
+    .trim()
+    .replace(/[^a-z0-9]+/g, "-")
+    .replace(/^-+|-+$/g, "");
+}
+
 function activityToBasicDetails(activity: PartnerActivity): BasicDetailsState {
   return {
     categoryId: activity.categoryId,
     cityId: activity.cityId,
+    destinationId: activity.destinationId ?? "",
     description: activity.description,
     durationLabel: activity.durationLabel ?? "",
     meetingPoint: activity.meetingPoint ?? "",
@@ -1927,6 +3548,15 @@ function activityToPolicies(activity: PartnerActivity): PoliciesState {
     cancellationPolicy: activity.cancellationPolicy ?? "",
     importantInfo: activity.importantInfo ?? ""
   };
+}
+
+function formatDestinationOption(destination: LookupDestination) {
+  const breadcrumb = destination.breadcrumb?.map((item) => item.name).join(" / ");
+  return breadcrumb || destination.name;
+}
+
+function formatActivityDestination(activity: PartnerActivity) {
+  return activity.destination ? formatDestinationOption(activity.destination) : activity.city.name;
 }
 
 function toStringArray(value: unknown) {
@@ -1972,7 +3602,7 @@ function getReadiness({
 }) {
   const basicDone = Boolean(
     activity.title.trim() &&
-      activity.cityId &&
+      (activity.destinationId || activity.cityId) &&
       activity.categoryId &&
       activity.shortDescription.trim() &&
       activity.description.trim()
@@ -2016,19 +3646,6 @@ function moveItem<T>(items: T[], index: number, direction: -1 | 1) {
   return next;
 }
 
-function parseMoneyToCents(value: string, currency: string) {
-  const amount = Number(value || 0);
-  const factor = zeroDecimalCurrencies.has(currency.toUpperCase()) ? 1 : 100;
-  return Math.round(amount * factor);
-}
-
-function centsToMajor(value: number, currency: string) {
-  const factor = zeroDecimalCurrencies.has(currency.toUpperCase()) ? 1 : 100;
-  return String(value / factor);
-}
-
-const zeroDecimalCurrencies = new Set(["IDR", "JPY", "KRW", "VND"]);
-
 function formatPriceType(value: string) {
   if (value === "per_group") return "per group";
   if (value === "fixed") return "fixed";
@@ -2048,6 +3665,36 @@ function statusVariant(status: ActivityStatus) {
   if (status === "PENDING_REVIEW" || status === "REVISION_REQUESTED") return "warning";
   if (status === "REJECTED" || status === "ARCHIVED") return "danger";
   return "neutral";
+}
+
+function revisionVariant(status: ActivityRevision["status"]) {
+  if (status === "APPLIED" || status === "APPROVED") return "success";
+  if (status === "PENDING_REVIEW") return "warning";
+  if (status === "REJECTED") return "danger";
+  if (status === "CANCELLED") return "neutral";
+  return "info";
+}
+
+function revisionLabel(status: ActivityRevision["status"]) {
+  if (status === "DRAFT") return "Draft changes";
+  if (status === "PENDING_REVIEW") return "Pending change review";
+  if (status === "REJECTED") return "Revision requested";
+  if (status === "APPLIED") return "Applied";
+  if (status === "APPROVED") return "Approved";
+  return formatStatus(status);
+}
+
+function isReadOnlyRevision(status: ActivityRevision["status"]) {
+  return status === "PENDING_REVIEW" || status === "APPLIED" || status === "APPROVED" || status === "CANCELLED";
+}
+
+function StatusLine({ label, value }: { label: string; value: string }) {
+  return (
+    <div className="flex items-center justify-between gap-4 border-b border-[#2B2B2B]/10 py-2 last:border-0">
+      <span className="text-travel-muted">{label}</span>
+      <span className="font-semibold text-travel-dark">{value}</span>
+    </div>
+  );
 }
 
 function formatStatus(status: string) {
