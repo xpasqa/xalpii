@@ -43,7 +43,7 @@ export function ActivityCard({
       className="group block overflow-hidden rounded-travel-lg border border-travel-border bg-white shadow-sm transition duration-300 hover:-translate-y-0.5 hover:border-travel-primary/20 hover:shadow-[0_18px_36px_rgba(26,26,26,0.10)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-travel-primary/30 focus-visible:ring-offset-2"
       href={href}
     >
-      <div className="relative aspect-[4/3] overflow-hidden bg-travel-bg">
+      <div className="relative aspect-[16/11] overflow-hidden bg-travel-bg">
         <img
           alt={title}
           className="size-full object-cover transition duration-700 ease-out group-hover:scale-[1.08]"
@@ -69,12 +69,12 @@ export function ActivityCard({
         </button>
       </div>
 
-      <div className="flex min-h-[138px] flex-col p-3.5">
+      <div className="flex min-h-[128px] flex-col p-3.5">
         <div className="truncate font-interface text-[12px] font-medium leading-5 text-travel-muted">
           {category} | {location}
         </div>
 
-        <h3 className="mt-1.5 line-clamp-2 min-h-[49px] font-brand text-[19px] font-bold leading-[1.28] text-travel-dark">
+        <h3 className="mt-1.5 line-clamp-2 min-h-[44px] font-brand text-[16px] font-bold leading-[1.28] text-travel-dark md:text-[17px]">
           {title}
         </h3>
 

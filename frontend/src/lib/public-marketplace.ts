@@ -166,7 +166,6 @@ export function mapPublicActivity(activity: PublicActivity): TravelActivity {
   const gallery = galleryImages(activity, cover);
   const pricing = primaryPricing(activity);
   const importantInfo = toStringList(activity.importantInfo);
-  const destinationLabel = activity.destination?.breadcrumbLabel;
   const leafDestination = activity.destination?.name ?? activity.city.name;
   const country = activity.destination?.breadcrumb?.[0]?.name ?? activity.city.country;
 
@@ -178,7 +177,7 @@ export function mapPublicActivity(activity: PublicActivity): TravelActivity {
     citySlug: activity.city.slug,
     city: leafDestination,
     country,
-    location: destinationLabel ?? `${activity.city.name}, ${activity.city.country}`,
+    location: leafDestination,
     imageUrl: cover,
     gallery,
     duration: activity.durationLabel ?? "Duration varies",

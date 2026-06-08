@@ -35,14 +35,14 @@ export function FeaturedCities({ cities }: { cities: TravelCity[] }) {
   return (
     <section className="mx-auto max-w-7xl px-4 pb-8 pt-14 sm:px-6 lg:px-8">
       <SectionHeader title="Featured cities" />
-      <div className="mt-7 grid gap-4 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-6">
+      <div className="mt-7 flex snap-x snap-mandatory gap-3 overflow-x-auto pb-2 sm:grid sm:gap-4 sm:overflow-visible sm:pb-0 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-6">
         {cities.map((city) => (
           <a
-            className="group relative overflow-hidden rounded-travel-lg bg-travel-dark shadow-sm transition duration-300 hover:-translate-y-0.5 hover:shadow-[0_18px_36px_rgba(26,26,26,0.14)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-travel-primary/30 focus-visible:ring-offset-2"
+            className="group relative w-[48vw] max-w-[176px] shrink-0 snap-start overflow-hidden rounded-travel-lg bg-travel-dark shadow-sm transition duration-300 hover:-translate-y-0.5 hover:shadow-[0_18px_36px_rgba(26,26,26,0.14)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-travel-primary/30 focus-visible:ring-offset-2 sm:w-auto sm:max-w-none sm:shrink"
             href={routes.city(city.slug)}
             key={city.slug}
           >
-            <div className="aspect-[4/5]">
+            <div className="aspect-[4/5.2] sm:aspect-[4/5]">
               <img
                 alt={`${city.name}, ${city.country}`}
                 className="size-full object-cover transition duration-700 ease-out group-hover:scale-[1.08]"
@@ -50,9 +50,9 @@ export function FeaturedCities({ cities }: { cities: TravelCity[] }) {
               />
             </div>
             <div className="absolute inset-x-0 bottom-0 h-3/4 bg-gradient-to-b from-black/0 via-black/52 to-black/95" />
-            <div className="absolute inset-x-0 bottom-0 p-4 text-white">
-              <h3 className="font-brand text-xl font-bold leading-none text-white">{city.name}</h3>
-              <p className="mt-1.5 font-interface text-xs font-medium text-white/82">
+            <div className="absolute inset-x-0 bottom-0 p-2.5 text-white sm:p-4">
+              <h3 className="font-brand text-[15px] font-bold leading-none text-white sm:text-xl">{city.name}</h3>
+              <p className="mt-1 font-interface text-[10px] font-medium text-white/82 sm:text-xs">
                 {city.activityCount} Activities
               </p>
             </div>
@@ -319,7 +319,7 @@ export function CityHero({ city }: { city: TravelCity }) {
       <div className="mx-auto grid max-w-7xl gap-8 px-4 py-10 sm:px-6 lg:grid-cols-[0.85fr_1.15fr] lg:px-8 lg:py-14">
         <div className="flex flex-col justify-center">
           <p className="font-interface text-sm font-medium text-travel-primary">
-            {city.region} | {city.country}
+            {city.region}
           </p>
           <h1 className="mt-3 font-brand text-4xl font-bold leading-tight text-travel-dark sm:text-5xl">
             Things to do in {city.name}

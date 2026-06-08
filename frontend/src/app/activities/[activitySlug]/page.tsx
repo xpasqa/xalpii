@@ -42,7 +42,7 @@ export default async function ActivityPage({ params }: ActivityPageProps) {
         <div className="space-y-8">
           <ActivityIntro activity={activity} />
           <ActivityDetailGallery activity={activity} />
-          <p className="font-interface text-lg font-medium leading-8 text-travel-dark">
+          <p className="font-interface text-[14px] font-normal leading-6 text-travel-dark/85">
             {activity.summary}
           </p>
           <div className="lg:hidden">

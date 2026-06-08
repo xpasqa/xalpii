@@ -56,6 +56,8 @@ type AboutItem = {
 };
 
 const containerOutlineClass = "border-[#2B2B2B]/35";
+const detailBodyClassName = "font-interface text-[14px] leading-6 text-travel-dark/85";
+const detailListTextClassName = "font-interface text-[14px] leading-6 text-travel-dark";
 
 export function ActivityIntro({ activity }: DetailSectionProps) {
   const providerName = activity.providerName ?? "Curated by Alpii";
@@ -63,10 +65,10 @@ export function ActivityIntro({ activity }: DetailSectionProps) {
   return (
     <section className="space-y-4">
       <p className="font-interface text-sm font-semibold text-travel-primary">{providerName}</p>
-      <h1 className="max-w-4xl font-brand text-3xl font-bold leading-tight text-travel-dark sm:text-4xl">
+      <h1 className="max-w-4xl font-brand text-[2rem] font-bold leading-[1.08] text-travel-dark sm:text-4xl">
         {activity.title}
       </h1>
-      <div className="flex flex-wrap items-center gap-x-4 gap-y-2 font-interface text-sm text-travel-muted">
+      <div className="flex flex-wrap items-center gap-x-4 gap-y-2 font-interface text-[13px] text-travel-muted sm:text-sm">
         {activity.badgeLabel ?? activity.badge ? (
           <span className="rounded-travel-md bg-[#FBEAE8] px-2.5 py-1 font-semibold text-travel-primary">
             {activity.badgeLabel ?? activity.badge}
@@ -90,55 +92,87 @@ export function ActivityIntro({ activity }: DetailSectionProps) {
 export function ActivityDetailGallery({ activity }: DetailSectionProps) {
   const images = ensureGallery(activity);
   const [primary, ...secondary] = images;
+  const [galleryOpen, setGalleryOpen] = useState(false);
 
   return (
-    <section className="grid gap-3 lg:grid-cols-[1.35fr_0.9fr]">
-      <div className="overflow-hidden rounded-travel-lg bg-travel-bg">
-        <img alt={activity.title} className="aspect-[16/10] size-full object-cover" src={primary} />
-      </div>
-      <div className="hidden grid-cols-2 gap-3 lg:grid">
-        {secondary.slice(0, 4).map((imageUrl, index) => {
-          const isLast = index === 3 || index === secondary.slice(0, 4).length - 1;
+    <>
+      <section className="grid gap-3 lg:grid-cols-[1.5fr_0.95fr]">
+        <div className="overflow-hidden rounded-travel-lg bg-travel-bg">
+          <img alt={activity.title} className="aspect-[16/8] size-full object-cover" src={primary} />
+        </div>
+        <div className="hidden grid-cols-2 gap-3 lg:grid">
+          {secondary.slice(0, 4).map((imageUrl, index) => {
+            const isLast = index === 3 || index === secondary.slice(0, 4).length - 1;
 
-          return (
-            <div className="relative overflow-hidden rounded-travel-lg bg-travel-bg" key={`${imageUrl}-${index}`}>
+            return (
+              <div className="relative overflow-hidden rounded-travel-lg bg-travel-bg" key={`${imageUrl}-${index}`}>
+                <img
+                  alt={`${activity.title} preview ${index + 2}`}
+                  className="aspect-[16/8.8] size-full object-cover"
+                  src={imageUrl}
+                />
+                {isLast ? (
+                  <button
+                    className="absolute bottom-3 right-3 inline-flex items-center gap-2 rounded-full bg-white px-4 py-2 font-interface text-sm font-semibold text-travel-dark shadow-[0_10px_24px_rgba(26,26,26,0.16)]"
+                    onClick={() => setGalleryOpen(true)}
+                    type="button"
+                  >
+                    <span>View all</span>
+                    <ImageIcon className="size-4" />
+                  </button>
+                ) : null}
+              </div>
+            );
+          })}
+        </div>
+        <div className="flex gap-3 overflow-x-auto lg:hidden">
+          {secondary.slice(0, 4).map((imageUrl, index) => (
+            <img
+              alt={`${activity.title} mobile preview ${index + 2}`}
+              className="h-28 w-44 shrink-0 rounded-travel-lg object-cover"
+              key={`${imageUrl}-${index}`}
+              src={imageUrl}
+            />
+          ))}
+          <button
+            className="inline-flex h-28 w-44 shrink-0 items-center justify-center rounded-travel-lg border border-[#2B2B2B]/12 bg-white font-interface text-sm font-semibold text-travel-dark"
+            onClick={() => setGalleryOpen(true)}
+            type="button"
+          >
+            View all photos
+          </button>
+        </div>
+      </section>
+
+      <Dialog
+        bodyClassName="px-4 pb-4 pt-3 sm:px-6"
+        mobileSheet
+        onClose={() => setGalleryOpen(false)}
+        open={galleryOpen}
+        panelClassName="max-w-5xl"
+        title="All photos"
+      >
+        <div className="grid grid-cols-2 gap-3 md:grid-cols-3">
+          {images.map((imageUrl, index) => (
+            <div className="overflow-hidden rounded-travel-lg bg-travel-bg" key={`${imageUrl}-${index}`}>
               <img
-                alt={`${activity.title} preview ${index + 2}`}
-                className="aspect-[16/10] size-full object-cover"
+                alt={`${activity.title} gallery ${index + 1}`}
+                className="aspect-square size-full object-cover"
                 src={imageUrl}
               />
-              {isLast ? (
-                <button
-                  className="absolute bottom-3 right-3 inline-flex items-center gap-2 rounded-full bg-white px-4 py-2 font-interface text-sm font-semibold text-travel-dark shadow-[0_10px_24px_rgba(26,26,26,0.16)]"
-                  type="button"
-                >
-                  <ImageIcon className="size-4" />
-                  View all photos
-                </button>
-              ) : null}
             </div>
-          );
-        })}
-      </div>
-      <div className="flex gap-3 overflow-x-auto lg:hidden">
-        {secondary.slice(0, 4).map((imageUrl, index) => (
-          <img
-            alt={`${activity.title} mobile preview ${index + 2}`}
-            className="h-28 w-44 shrink-0 rounded-travel-lg object-cover"
-            key={`${imageUrl}-${index}`}
-            src={imageUrl}
-          />
-        ))}
-      </div>
-    </section>
+          ))}
+        </div>
+      </Dialog>
+    </>
   );
 }
 
 export function ActivityBookingBox({ activity }: DetailSectionProps) {
   const { currency: displayCurrency } = useCurrency();
   const isDesktopCalendar = useDesktopCalendar();
+  const isDesktopBooking = isDesktopCalendar;
   const activeOptions = (activity.options ?? []).filter((option) => option.isActive);
-  const initialOption = activeOptions.find((option) => option.isDefault) ?? activeOptions[0] ?? null;
   const [adults, setAdults] = useState(1);
   const [children, setChildren] = useState(0);
   const [openPanel, setOpenPanel] = useState<"date" | "travelers" | null>(null);
@@ -204,6 +238,9 @@ export function ActivityBookingBox({ activity }: DetailSectionProps) {
   function checkAvailability() {
     if (!selectedDate) {
       setInlineError("Please select a date.");
+      if (!isDesktopBooking) {
+        setOpenPanel("date");
+      }
       return;
     }
 
@@ -221,7 +258,7 @@ export function ActivityBookingBox({ activity }: DetailSectionProps) {
   return (
     <div className="space-y-4">
       <Card className={`${containerOutlineClass} shadow-[0_14px_32px_rgba(26,26,26,0.08)]`}>
-        <CardContent className="space-y-4 p-5">
+        <CardContent className="space-y-4 p-4 sm:p-5">
           <div className="font-interface text-travel-dark">
             <p className="text-xs font-medium text-travel-muted">From</p>
             <span className="mt-1 inline-block text-2xl font-semibold tracking-normal">
@@ -231,88 +268,109 @@ export function ActivityBookingBox({ activity }: DetailSectionProps) {
           </div>
 
           <div className={`relative grid rounded-travel-lg border ${containerOutlineClass} md:grid-cols-2`}>
-            <Popover
-              onOpenChange={(open) => setOpenPanel(open ? "date" : null)}
-              open={openPanel === "date"}
-            >
-              <PopoverTrigger asChild>
+            {isDesktopBooking ? (
+              <>
+                <Popover
+                  onOpenChange={(open) => setOpenPanel(open ? "date" : null)}
+                  open={openPanel === "date"}
+                >
+                  <PopoverTrigger asChild>
+                    <button
+                      className="flex min-h-[58px] items-center justify-between px-3 py-2.5 text-left transition hover:bg-travel-bg"
+                      type="button"
+                    >
+                      <span>
+                        <span className="block text-[11px] font-medium text-travel-muted">Date</span>
+                        <span className="mt-0.5 block text-sm font-medium text-travel-dark">
+                          {selectedDate ? formatTravelDate(selectedDate) : "Select date"}
+                        </span>
+                      </span>
+                      <ChevronDown className="size-3.5 text-travel-muted" />
+                    </button>
+                  </PopoverTrigger>
+                  <PopoverContent align="center" className="w-auto max-w-[calc(100vw-2rem)] p-5">
+                    <Calendar
+                      disabled={(date) => isPastCalendarDate(date) || !isDateSelectableForActivity(activity, date)}
+                      mode="single"
+                      numberOfMonths={2}
+                      onSelect={(date) => {
+                        if (date) selectDate(dateToIsoDate(date));
+                      }}
+                      selected={selectedDate ? isoDateToCalendarDate(selectedDate) : undefined}
+                    />
+                  </PopoverContent>
+                </Popover>
                 <button
-                  className="flex min-h-[58px] items-center justify-between px-3 py-2.5 text-left transition hover:bg-travel-bg"
+                  className={`flex min-h-[58px] items-center justify-between border-t px-3 py-2.5 text-left transition hover:bg-travel-bg ${containerOutlineClass} md:border-l md:border-t-0`}
+                  onClick={() => setOpenPanel(openPanel === "travelers" ? null : "travelers")}
                   type="button"
                 >
                   <span>
-                    <span className="block text-[11px] font-medium text-travel-muted">Date</span>
+                    <span className="block text-[11px] font-medium text-travel-muted">Travelers</span>
                     <span className="mt-0.5 block text-sm font-medium text-travel-dark">
-                      {selectedDate ? formatTravelDate(selectedDate) : "Select date"}
+                      {travelerSummary(adults, children)}
                     </span>
                   </span>
                   <ChevronDown className="size-3.5 text-travel-muted" />
                 </button>
-              </PopoverTrigger>
-              <PopoverContent align="start" className="w-auto max-w-[calc(100vw-2rem)]">
-                <Calendar
-                  disabled={(date) => isPastCalendarDate(date) || !isDateSelectableForActivity(activity, date)}
-                  mode="single"
-                  numberOfMonths={isDesktopCalendar ? 2 : 1}
-                  onSelect={(date) => {
-                    if (date) selectDate(dateToIsoDate(date));
-                  }}
-                  selected={selectedDate ? isoDateToCalendarDate(selectedDate) : undefined}
-                />
-                <p className="mt-3 max-w-md text-xs leading-5 text-travel-muted">
-                  Dates are filtered by active sessions and package availability. Package choices appear after checking availability.
-                </p>
-              </PopoverContent>
-            </Popover>
-            <button
-              className={`flex min-h-[58px] items-center justify-between border-t px-3 py-2.5 text-left transition hover:bg-travel-bg ${containerOutlineClass} md:border-l md:border-t-0`}
-              onClick={() => setOpenPanel(openPanel === "travelers" ? null : "travelers")}
-              type="button"
-            >
-              <span>
-                <span className="block text-[11px] font-medium text-travel-muted">Travelers</span>
-                <span className="mt-0.5 block text-sm font-medium text-travel-dark">
-                  {travelerSummary(adults, children)}
-                </span>
-              </span>
-              <ChevronDown className="size-3.5 text-travel-muted" />
-            </button>
 
-            {openPanel === "travelers" ? (
-              <div className="absolute left-0 right-0 top-[calc(100%+8px)] z-40 rounded-travel-lg border border-[#2B2B2B]/20 bg-white p-4 shadow-[0_16px_36px_rgba(26,26,26,0.14)]">
-                <TravelerStepper
-                  description="Age 14-105"
-                  label="Adult"
-                  max={Math.max(1, 14 - children)}
-                  min={1}
-                  onChange={updateAdults}
-                  value={adults}
-                />
-                <div className="my-3 border-t border-[#2B2B2B]/10" />
-                <TravelerStepper
-                  badge={childDiscountBadge}
-                  description="Age 4-13"
-                  label="Child"
-                  max={Math.max(0, 14 - adults)}
-                  min={0}
-                  onChange={updateChildren}
-                  value={children}
-                />
-                <ButtonCTA className="mt-4" fullWidth onClick={() => setOpenPanel(null)} size="sm" type="button">
-                  Apply
-                </ButtonCTA>
-              </div>
-            ) : null}
+                {openPanel === "travelers" ? (
+                  <div className="absolute left-0 right-0 top-[calc(100%+8px)] z-40 rounded-travel-lg border border-[#2B2B2B]/20 bg-white p-4 shadow-[0_16px_36px_rgba(26,26,26,0.14)]">
+                    <TravelerPicker
+                      adults={adults}
+                      childDiscountBadge={childDiscountBadge}
+                      children={children}
+                      onAdultsChange={updateAdults}
+                      onApply={() => setOpenPanel(null)}
+                      onChildrenChange={updateChildren}
+                    />
+                  </div>
+                ) : null}
+              </>
+            ) : (
+              <>
+                <button
+                  className="flex min-h-[62px] items-center justify-between px-3 py-3 text-left transition hover:bg-travel-bg"
+                  onClick={() => setOpenPanel("date")}
+                  type="button"
+                >
+                  <span>
+                    <span className="block text-[11px] font-medium uppercase tracking-[0.08em] text-travel-muted">
+                      Date
+                    </span>
+                    <span className="mt-1 block text-[15px] font-semibold text-travel-dark">
+                      {selectedDate ? formatTravelDate(selectedDate) : "Select date"}
+                    </span>
+                  </span>
+                  <CalendarDays className="size-4 text-travel-muted" />
+                </button>
+                <button
+                  className={`flex min-h-[62px] items-center justify-between border-t px-3 py-3 text-left transition hover:bg-travel-bg ${containerOutlineClass}`}
+                  onClick={() => setOpenPanel("travelers")}
+                  type="button"
+                >
+                  <span>
+                    <span className="block text-[11px] font-medium uppercase tracking-[0.08em] text-travel-muted">
+                      Travelers
+                    </span>
+                    <span className="mt-1 block text-[15px] font-semibold text-travel-dark">
+                      {travelerSummary(adults, children)}
+                    </span>
+                  </span>
+                  <Users className="size-4 text-travel-muted" />
+                </button>
+              </>
+            )}
           </div>
 
           {inlineError ? <p className="text-sm font-semibold text-red-700">{inlineError}</p> : null}
-          <p className="text-xs leading-5 text-travel-muted">
-            Select a package after checking availability.
-          </p>
+          <p className="text-xs leading-5 text-travel-muted">Select a package after checking availability.</p>
 
-          <ButtonCTA fullWidth onClick={checkAvailability} size="lg" type="button">
-            Check availability
-          </ButtonCTA>
+          <div className="hidden md:block">
+            <ButtonCTA fullWidth onClick={checkAvailability} size="lg" type="button">
+              Check availability
+            </ButtonCTA>
+          </div>
 
           <div className="space-y-4 rounded-travel-lg bg-[#F3FAF7] p-4">
             <TrustLine
@@ -329,12 +387,35 @@ export function ActivityBookingBox({ activity }: DetailSectionProps) {
         </CardContent>
       </Card>
 
+      {!isDesktopBooking ? (
+        <>
+          <div className="h-20" />
+          <div className="fixed inset-x-0 bottom-0 z-40 border-t border-[#2B2B2B]/10 bg-white/96 px-4 pb-[calc(env(safe-area-inset-bottom)+14px)] pt-3 shadow-[0_-12px_34px_rgba(26,26,26,0.12)] backdrop-blur">
+            <div className="mx-auto flex max-w-7xl items-center gap-3">
+              <div className="min-w-0 flex-1">
+                <p className="text-[11px] font-medium uppercase tracking-[0.08em] text-travel-muted">
+                  From
+                </p>
+                <p className="truncate font-interface text-base font-semibold text-travel-dark">
+                  {formatMoney(activity.price, displayCurrency)}
+                </p>
+              </div>
+              <ButtonCTA className="h-12 flex-1 rounded-[12px]" fullWidth onClick={checkAvailability} size="lg" type="button">
+                Check availability
+              </ButtonCTA>
+            </div>
+          </div>
+        </>
+      ) : null}
+
       <Dialog
+        bodyClassName="px-4 pb-5 pt-4 sm:px-6 sm:pb-6"
         description={
           selectedDate
             ? `Available for ${formatTravelDate(selectedDate)} · ${travelerSummary(adults, children)}`
             : travelerSummary(adults, children)
         }
+        mobileSheet
         onClose={() => setAvailabilityModalOpen(false)}
         open={availabilityModalOpen}
         title="Choose your package"
@@ -396,6 +477,44 @@ export function ActivityBookingBox({ activity }: DetailSectionProps) {
         </div>
       </Dialog>
 
+      <Dialog
+        bodyClassName="px-4 pb-5 pt-3 sm:px-6"
+        description="Choose a travel date before selecting your package."
+        mobileSheet
+        onClose={() => setOpenPanel(null)}
+        open={!isDesktopBooking && openPanel === "date"}
+        title="Select date"
+      >
+        <Calendar
+          className="mx-auto"
+          disabled={(date) => isPastCalendarDate(date) || !isDateSelectableForActivity(activity, date)}
+          mode="single"
+          numberOfMonths={1}
+          onSelect={(date) => {
+            if (date) selectDate(dateToIsoDate(date));
+          }}
+          selected={selectedDate ? isoDateToCalendarDate(selectedDate) : undefined}
+        />
+      </Dialog>
+
+      <Dialog
+        bodyClassName="px-4 pb-5 pt-3 sm:px-6"
+        description="Choose the number of travelers for this booking."
+        mobileSheet
+        onClose={() => setOpenPanel(null)}
+        open={!isDesktopBooking && openPanel === "travelers"}
+        title="Select travelers"
+      >
+        <TravelerPicker
+          adults={adults}
+          childDiscountBadge={childDiscountBadge}
+          children={children}
+          onAdultsChange={updateAdults}
+          onApply={() => setOpenPanel(null)}
+          onChildrenChange={updateChildren}
+        />
+      </Dialog>
+
       <Card className={`${containerOutlineClass} shadow-none`}>
         <CardContent className="flex items-center gap-4 p-4">
           <div className="flex size-12 shrink-0 items-center justify-center rounded-travel-lg bg-[#FFF4E8] text-travel-primary">
@@ -410,6 +529,50 @@ export function ActivityBookingBox({ activity }: DetailSectionProps) {
         </CardContent>
       </Card>
     </div>
+  );
+}
+
+function TravelerPicker({
+  adults,
+  childDiscountBadge,
+  children,
+  onAdultsChange,
+  onApply,
+  onChildrenChange
+}: {
+  adults: number;
+  childDiscountBadge?: string;
+  children: number;
+  onAdultsChange: (value: number) => void;
+  onApply: () => void;
+  onChildrenChange: (value: number) => void;
+}) {
+  return (
+    <>
+      <div className="space-y-4">
+        <TravelerStepper
+          description="Age 14-105"
+          label="Adult"
+          max={Math.max(1, 14 - children)}
+          min={1}
+          onChange={onAdultsChange}
+          value={adults}
+        />
+        <div className="border-t border-[#2B2B2B]/10" />
+        <TravelerStepper
+          badge={childDiscountBadge}
+          description="Age 4-13"
+          label="Child"
+          max={Math.max(0, 14 - adults)}
+          min={0}
+          onChange={onChildrenChange}
+          value={children}
+        />
+      </div>
+      <ButtonCTA className="mt-5 h-12 rounded-[12px]" fullWidth onClick={onApply} size="lg" type="button">
+        Apply
+      </ButtonCTA>
+    </>
   );
 }
 
@@ -434,25 +597,25 @@ function TravelerStepper({
     <div className="flex items-center justify-between gap-4">
       <div>
         <div className="flex items-center gap-2">
-          <p className="text-sm font-semibold text-travel-dark">{label}</p>
+          <p className="text-base font-semibold text-travel-dark">{label}</p>
           {badge ? <span className="rounded-full bg-[#FBEAE8] px-2 py-0.5 text-[11px] font-semibold text-travel-primary">{badge}</span> : null}
         </div>
-        <p className="mt-0.5 text-xs text-travel-muted">{description}</p>
+        <p className="mt-0.5 text-[13px] text-travel-muted">{description}</p>
       </div>
       <div className="flex items-center gap-3">
         <button
           aria-label={`Decrease ${label}`}
-          className="flex size-8 items-center justify-center rounded-full border border-[#2B2B2B]/20 text-lg disabled:opacity-35"
+          className="flex size-10 items-center justify-center rounded-full border border-[#2B2B2B]/20 text-xl disabled:opacity-35"
           disabled={value <= min}
           onClick={() => onChange(Math.max(min, value - 1))}
           type="button"
         >
           -
         </button>
-        <span className="w-5 text-center text-sm font-semibold">{value}</span>
+        <span className="w-8 text-center text-lg font-semibold">{value}</span>
         <button
           aria-label={`Increase ${label}`}
-          className="flex size-8 items-center justify-center rounded-full border border-[#2B2B2B]/20 text-lg disabled:opacity-35"
+          className="flex size-10 items-center justify-center rounded-full border border-[#2B2B2B]/20 text-xl disabled:opacity-35"
           disabled={value >= max}
           onClick={() => onChange(Math.min(max, value + 1))}
           type="button"
@@ -766,12 +929,14 @@ export function AboutActivitySection({ activity }: DetailSectionProps) {
       <div className="grid gap-4 md:grid-cols-2">
         {items.map((item) => (
           <div className="flex gap-3" key={item.title}>
-            <div className="mt-0.5 flex size-9 shrink-0 items-center justify-center rounded-travel-md bg-[#FBEAE8] text-travel-primary">
+            <div className="flex size-11 shrink-0 items-center justify-center self-center rounded-travel-md bg-[#FBEAE8] text-travel-primary">
               {item.icon}
             </div>
             <div>
-              <h3 className="font-brand text-base font-semibold text-travel-dark">{item.title}</h3>
-              <p className="mt-1 font-interface text-sm leading-6 text-travel-muted">
+              <h3 className="font-brand text-[15px] font-semibold leading-[1.35] text-travel-dark">
+                {item.title}
+              </h3>
+              <p className={`mt-1 ${detailBodyClassName}`}>
                 {item.description}
               </p>
             </div>
@@ -792,31 +957,33 @@ export function ActivityItinerarySection({ activity }: DetailSectionProps) {
           {itinerary.map((item, index) => (
             <div className="grid grid-cols-[28px_1fr] gap-4" key={`${item.title}-${index}`}>
               <div className="flex flex-col items-center">
-                <span className="mt-1 flex size-7 items-center justify-center rounded-full border border-travel-primary bg-white text-travel-primary">
-                  {index === 0 ? <MapPin className="size-3.5" /> : <Circle className="size-2 fill-current" />}
-                </span>
+                <span className="mt-1 block size-3 rounded-full bg-travel-primary" />
                 {index < itinerary.length - 1 ? (
-                  <span className="mt-2 h-full min-h-12 w-px bg-travel-border" />
+                  <span className="-mt-0.5 h-full min-h-14 w-px bg-travel-border" />
                 ) : null}
               </div>
-              <div className="pb-6">
+              <div className="pb-5">
                 <div className="flex flex-wrap items-baseline justify-between gap-2">
-                  <h3 className="font-brand text-base font-semibold text-travel-dark">{item.title}</h3>
+                  <h3 className="font-brand text-[15px] font-semibold leading-[1.35] text-travel-dark">
+                    {item.title}
+                  </h3>
                   {item.durationLabel ? (
                     <span className="font-interface text-xs text-travel-muted">{item.durationLabel}</span>
                   ) : null}
                 </div>
-                <p className="mt-1 font-interface text-sm leading-6 text-travel-muted">{item.subtitle}</p>
+                <p className={`mt-1 ${detailBodyClassName}`}>
+                  {item.subtitle}
+                </p>
               </div>
             </div>
           ))}
         </div>
-        <div className={`relative min-h-72 overflow-hidden rounded-travel-lg border ${containerOutlineClass} bg-travel-bg`}>
+        <div className="relative min-h-72 overflow-hidden rounded-travel-lg bg-travel-bg/55">
           <div className="absolute inset-0 bg-[linear-gradient(90deg,rgba(234,234,234,0.65)_1px,transparent_1px),linear-gradient(rgba(234,234,234,0.65)_1px,transparent_1px)] bg-[size:34px_34px]" />
           <div className="absolute left-8 top-8 h-36 w-44 rounded-full border-2 border-dashed border-travel-primary/45" />
           <MapPin className="absolute left-12 top-12 size-6 fill-travel-primary text-travel-primary" />
           <MapPin className="absolute bottom-16 right-14 size-6 fill-travel-primary text-travel-primary" />
-          <div className="absolute bottom-4 left-4 rounded-full bg-white px-3 py-2 font-interface text-xs font-semibold text-travel-dark shadow-sm">
+          <div className="absolute bottom-4 left-4 font-interface text-xs font-medium text-travel-muted">
             Route preview only
           </div>
         </div>
@@ -826,59 +993,65 @@ export function ActivityItinerarySection({ activity }: DetailSectionProps) {
 }
 
 export function ActivityContentSections({ activity }: DetailSectionProps) {
+  const [descriptionExpanded, setDescriptionExpanded] = useState(false);
   const fullDescription = activity.fullDescription ?? [activity.description];
   const includes = activity.includes ?? activity.included;
   const notIncluded = activity.notIncluded ?? activity.excluded;
+  const descriptionText = fullDescription.join(" ");
+  const includeRows = [
+    ...includes.map((item) => ({ item, tone: "positive" as const })),
+    ...notIncluded.map((item) => ({ item, tone: "muted" as const }))
+  ];
 
   return (
     <>
-      <DetailSection id="highlights" title="Highlights">
-        <ul className="grid gap-3 md:grid-cols-2">
+      <SplitDetailSection id="highlights" title="Highlights">
+        <ul className="space-y-1">
           {getHighlights(activity).map((highlight) => (
-            <li className="flex gap-3 font-interface text-sm leading-6 text-travel-dark" key={highlight}>
-              <Check className="mt-0.5 size-4 shrink-0 text-travel-primary" />
-              {highlight}
+            <li className={`flex gap-2.5 ${detailListTextClassName}`} key={highlight}>
+              <span className="mt-[9px] block size-1.5 shrink-0 rounded-full bg-travel-dark" />
+              <span>{highlight}</span>
             </li>
           ))}
         </ul>
-      </DetailSection>
+      </SplitDetailSection>
 
-      <DetailSection id="description" title="Full description">
-        <div className="space-y-4 font-interface text-base leading-8 text-travel-muted">
-          {fullDescription.map((paragraph) => (
-            <p key={paragraph}>{paragraph}</p>
-          ))}
-          {fullDescription.join(" ").length > 260 ? (
-            <button className="font-interface text-sm font-semibold text-travel-primary" type="button">
-              See more
+      <SplitDetailSection id="description" title="Description">
+        <div>
+          <p
+            className={[
+              detailBodyClassName,
+              descriptionExpanded ? "" : "line-clamp-5"
+            ].join(" ")}
+          >
+            {descriptionText}
+          </p>
+          {descriptionText.length > 260 ? (
+            <button
+              className="mt-1.5 font-interface text-sm font-semibold text-travel-dark underline underline-offset-4"
+              onClick={() => setDescriptionExpanded((current) => !current)}
+              type="button"
+            >
+              {descriptionExpanded ? "Show less" : "See more"}
             </button>
           ) : null}
         </div>
-      </DetailSection>
+      </SplitDetailSection>
 
-      <DetailSection id="includes" title="Includes">
-        <div className="grid gap-6 md:grid-cols-2">
-          <ListBlock icon={<Check className="size-4" />} items={includes} title="Included" tone="positive" />
-          <ListBlock icon={<X className="size-4" />} items={notIncluded} title="Not included" tone="muted" />
-        </div>
-      </DetailSection>
-
-      <DetailSection id="information" title="Important information">
-        <div className="grid gap-5 md:grid-cols-3">
-          <InfoCard title="What to bring" items={activity.whatToBring ?? ["Comfortable shoes", "Water"]} />
-          <InfoCard title="Not allowed" items={activity.notAllowed ?? ["Large luggage", "Smoking indoors"]} />
-          <InfoCard title="Know before you go" items={activity.importantInfo} />
-        </div>
-      </DetailSection>
-
-      <div className="grid gap-5 md:grid-cols-2">
-        <DetailSection title="Meeting point">
-          <p className="font-interface text-sm leading-7 text-travel-muted">{activity.meetingPoint}</p>
-        </DetailSection>
-        <DetailSection title="Cancellation policy">
-          <p className="font-interface text-sm leading-7 text-travel-muted">{activity.cancellationPolicy}</p>
-        </DetailSection>
-      </div>
+      <SplitDetailSection id="includes" title="Includes">
+        <ul className="space-y-1.5">
+          {includeRows.map(({ item, tone }) => (
+            <li className={`flex gap-2.5 ${detailListTextClassName}`} key={`${tone}-${item}`}>
+              {tone === "positive" ? (
+                <Check className="mt-1 size-[18px] shrink-0 stroke-[2.75] text-[#178A57]" />
+              ) : (
+                <X className="mt-1 size-[18px] shrink-0 stroke-[2.5] text-travel-primary" />
+              )}
+              <span>{item}</span>
+            </li>
+          ))}
+        </ul>
+      </SplitDetailSection>
     </>
   );
 }
@@ -894,8 +1067,31 @@ function DetailSection({
 }) {
   return (
     <section className={`scroll-mt-24 border-t ${containerOutlineClass} pt-8`} id={id}>
-      <h2 className="font-brand text-2xl font-bold text-travel-dark">{title}</h2>
+      <h2 className="font-brand text-[1.12rem] font-bold leading-tight text-travel-dark sm:text-[1.2rem]">
+        {title}
+      </h2>
       <div className="mt-5">{children}</div>
+    </section>
+  );
+}
+
+function SplitDetailSection({
+  id,
+  title,
+  children
+}: {
+  id?: string;
+  title: string;
+  children: ReactNode;
+}) {
+  return (
+    <section className={`scroll-mt-24 border-t ${containerOutlineClass} py-5`} id={id}>
+      <div className="grid items-start gap-3 md:grid-cols-[150px_minmax(0,1fr)] md:gap-5">
+        <h2 className="font-brand text-[1.05rem] font-bold leading-tight text-travel-dark sm:text-[1.1rem]">
+          {title}
+        </h2>
+        <div className="max-w-4xl">{children}</div>
+      </div>
     </section>
   );
 }
@@ -972,10 +1168,10 @@ function ListBlock({
 }) {
   return (
     <div>
-      <h3 className="font-brand text-base font-semibold text-travel-dark">{title}</h3>
+      <h3 className="font-brand text-[17px] font-semibold leading-[1.35] text-travel-dark">{title}</h3>
       <ul className="mt-4 space-y-3">
         {items.map((item) => (
-          <li className="flex gap-3 font-interface text-sm leading-6 text-travel-muted" key={item}>
+          <li className="flex gap-3 font-interface text-sm leading-7 text-travel-muted md:text-[15px]" key={item}>
             <span className={tone === "positive" ? "mt-1 text-travel-primary" : "mt-1 text-travel-muted"}>
               {icon}
             </span>
@@ -990,10 +1186,10 @@ function ListBlock({
 function InfoCard({ title, items }: { title: string; items: string[] }) {
   return (
     <div className={`rounded-travel-lg border ${containerOutlineClass} p-4`}>
-      <h3 className="font-brand text-base font-semibold text-travel-dark">{title}</h3>
+      <h3 className="font-brand text-[17px] font-semibold leading-[1.35] text-travel-dark">{title}</h3>
       <ul className="mt-3 space-y-2">
         {items.map((item) => (
-          <li className="font-interface text-sm leading-6 text-travel-muted" key={item}>
+          <li className="font-interface text-sm leading-7 text-travel-muted md:text-[15px]" key={item}>
             {item}
           </li>
         ))}
@@ -1006,55 +1202,51 @@ function getAboutItems(activity: TravelActivity): AboutItem[] {
   if (activity.aboutItems?.length) {
     return activity.aboutItems.map((item, index) => ({
       ...item,
-      icon: defaultAboutIcons[index] ?? <Info className="size-4" />
+      icon: defaultAboutIcons[index] ?? <Info className="size-[18px]" />
     }));
   }
 
   return [
     {
       title: "Free cancellation",
-      description: activity.cancellationPolicy,
-      icon: <CheckCircle2 className="size-4" />
+      description: "Cancel up to 24 hours in advance for a full refund",
+      icon: <CheckCircle2 className="size-[18px]" />
     },
     {
       title: "Reserve now & pay later",
-      description:
-        activity.paymentFlexibility ??
-        "Keep your travel plans flexible — book your spot and pay nothing today.",
-      icon: <CalendarDays className="size-4" />
+      description: "Book your spot and pay nothing today.",
+      icon: <CalendarDays className="size-[18px]" />
     },
     {
       title: `Duration ${activity.durationLabel ?? activity.duration}`,
       description: "Check availability to see starting times",
-      icon: <Clock className="size-4" />
+      icon: <Clock className="size-[18px]" />
     },
     {
       title: "Live tour guide",
       description: activity.guideLanguages?.join(", ") ?? "English",
-      icon: <Languages className="size-4" />
+      icon: <Languages className="size-[18px]" />
     },
     {
       title: activity.groupType ?? "Private or small groups available",
-      description: "Enjoy a more personal experience with a smaller group format.",
-      icon: <Users className="size-4" />
+      description: "Enjoy a more personal experience.",
+      icon: <Users className="size-[18px]" />
     },
     {
       title: "Dietary options available",
-      description:
-        activity.dietaryOptions ??
-        "Vegetarian, pescatarian, dairy-free and other diets supported. Please inform the activity provider of any dietary needs when booking.",
-      icon: <Utensils className="size-4" />
+      description: "Dietary needs can be shared with the activity.",
+      icon: <Utensils className="size-[18px]" />
     }
   ];
 }
 
 const defaultAboutIcons = [
-  <CheckCircle2 className="size-4" key="cancel" />,
-  <CalendarDays className="size-4" key="pay" />,
-  <Clock className="size-4" key="duration" />,
-  <Languages className="size-4" key="language" />,
-  <Users className="size-4" key="group" />,
-  <Utensils className="size-4" key="diet" />
+  <CheckCircle2 className="size-[18px]" key="cancel" />,
+  <CalendarDays className="size-[18px]" key="pay" />,
+  <Clock className="size-[18px]" key="duration" />,
+  <Languages className="size-[18px]" key="language" />,
+  <Users className="size-[18px]" key="group" />,
+  <Utensils className="size-[18px]" key="diet" />
 ];
 
 function getItinerary(activity: TravelActivity) {
