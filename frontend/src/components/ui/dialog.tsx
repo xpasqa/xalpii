@@ -64,11 +64,11 @@ export function Dialog({
       >
         <div className="flex items-start justify-between gap-4 border-b border-[#2B2B2B]/10 px-5 py-4 sm:px-6">
           <div>
-            <h2 className="font-brand text-[1.75rem] font-semibold leading-tight text-travel-dark sm:text-[1.9rem]">
+            <h2 className="font-brand text-[1.55rem] font-semibold leading-tight text-travel-dark sm:text-[1.65rem]">
               {title}
             </h2>
             {description ? (
-              <p className="mt-1 font-interface text-sm leading-6 text-travel-muted sm:text-[15px]">
+              <p className="mt-1 font-interface text-[14px] leading-6 text-travel-dark/75">
                 {description}
               </p>
             ) : null}

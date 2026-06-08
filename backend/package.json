@@ -12,7 +12,10 @@
     "prisma:studio": "prisma studio",
     "db:reset": "prisma migrate reset",
     "start": "node dist/src/main.js",
-    "start:dev": "nest start --watch"
+    "start:dev": "nest start --watch",
+    "import:tokyo": "tsx prisma/importers/import-tokyo.ts",
+    "import:paris": "tsx prisma/importers/import-paris.ts",
+    "import:zurich": "tsx prisma/importers/import-zurich.ts"
   },
   "prisma": {
     "seed": "ts-node prisma/seed.ts"
@@ -52,6 +55,7 @@
     "ts-loader": "^9.5.2",
     "ts-node": "^10.9.2",
     "tsconfig-paths": "^4.2.0",
+    "tsx": "^4.22.4",
     "typescript": "^5.8.3",
     "typescript-eslint": "^8.33.1"
   }

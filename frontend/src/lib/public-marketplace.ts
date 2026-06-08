@@ -178,6 +178,9 @@ export function mapPublicActivity(activity: PublicActivity): TravelActivity {
     city: leafDestination,
     country,
     location: leafDestination,
+    destinationBreadcrumb:
+      activity.destination?.breadcrumbLabel ??
+      [country, leafDestination].filter((value, index, values) => Boolean(value) && values.indexOf(value) === index).join(" / "),
     imageUrl: cover,
     gallery,
     duration: activity.durationLabel ?? "Duration varies",

@@ -1,4 +1,5 @@
 import type { ReactNode } from "react";
+import Link from "next/link";
 import { ArrowRight, Check, Compass, ShieldCheck, Sparkles } from "lucide-react";
 import { ActivityCard } from "../activity/ActivityCard";
 import type { TravelActivity, TravelCity } from "../../../data/mock-travel";
@@ -37,7 +38,7 @@ export function FeaturedCities({ cities }: { cities: TravelCity[] }) {
       <SectionHeader title="Featured cities" />
       <div className="mt-7 flex snap-x snap-mandatory gap-3 overflow-x-auto pb-2 sm:grid sm:gap-4 sm:overflow-visible sm:pb-0 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-6">
         {cities.map((city) => (
-          <a
+          <Link
             className="group relative w-[48vw] max-w-[176px] shrink-0 snap-start overflow-hidden rounded-travel-lg bg-travel-dark shadow-sm transition duration-300 hover:-translate-y-0.5 hover:shadow-[0_18px_36px_rgba(26,26,26,0.14)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-travel-primary/30 focus-visible:ring-offset-2 sm:w-auto sm:max-w-none sm:shrink"
             href={routes.city(city.slug)}
             key={city.slug}
@@ -56,7 +57,7 @@ export function FeaturedCities({ cities }: { cities: TravelCity[] }) {
                 {city.activityCount} Activities
               </p>
             </div>
-          </a>
+          </Link>
         ))}
       </div>
     </section>

@@ -1,7 +1,7 @@
 "use client";
 
 import type { ReactNode } from "react";
-import { useEffect, useMemo, useState } from "react";
+import { createContext, useContext, useEffect, useMemo, useState } from "react";
 import {
   CalendarDays,
   Check,
@@ -49,22 +49,66 @@ type DetailSectionProps = {
   activity: TravelActivity;
 };
 
+type AvailabilityResultsState = {
+  adults: number;
+  children: number;
+  packages: AvailablePackage[];
+  selectedDate: string;
+};
+
+type AvailabilityResultsContextValue = {
+  clearResults: () => void;
+  results: AvailabilityResultsState | null;
+  setResults: (results: AvailabilityResultsState) => void;
+};
+
 type AboutItem = {
   title: string;
   description: string;
   icon: ReactNode;
 };
 
-const containerOutlineClass = "border-[#2B2B2B]/35";
+const containerOutlineClass = "border-[#2B2B2B]/55";
 const detailBodyClassName = "font-interface text-[14px] leading-6 text-travel-dark/85";
 const detailListTextClassName = "font-interface text-[14px] leading-6 text-travel-dark";
+const AvailabilityResultsContext = createContext<AvailabilityResultsContextValue | null>(null);
+
+export function ActivityAvailabilityProvider({ children }: { children: ReactNode }) {
+  const [results, setResultsState] = useState<AvailabilityResultsState | null>(null);
+
+  return (
+    <AvailabilityResultsContext.Provider
+      value={{
+        clearResults: () => setResultsState(null),
+        results,
+        setResults: setResultsState
+      }}
+    >
+      {children}
+    </AvailabilityResultsContext.Provider>
+  );
+}
+
+function useAvailabilityResults() {
+  const context = useContext(AvailabilityResultsContext);
+
+  if (!context) {
+    return {
+      clearResults: () => undefined,
+      results: null,
+      setResults: () => undefined
+    };
+  }
+
+  return context;
+}
 
 export function ActivityIntro({ activity }: DetailSectionProps) {
-  const providerName = activity.providerName ?? "Curated by Alpii";
+  const locationEyebrow = activity.destinationBreadcrumb ?? buildActivityEyebrow(activity);
 
   return (
     <section className="space-y-4">
-      <p className="font-interface text-sm font-semibold text-travel-primary">{providerName}</p>
+      <p className="font-interface text-sm font-semibold text-travel-primary">{locationEyebrow}</p>
       <h1 className="max-w-4xl font-brand text-[2rem] font-bold leading-[1.08] text-travel-dark sm:text-4xl">
         {activity.title}
       </h1>
@@ -98,7 +142,7 @@ export function ActivityDetailGallery({ activity }: DetailSectionProps) {
     <>
       <section className="grid gap-3 lg:grid-cols-[1.5fr_0.95fr]">
         <div className="overflow-hidden rounded-travel-lg bg-travel-bg">
-          <img alt={activity.title} className="aspect-[16/8] size-full object-cover" src={primary} />
+          <img alt={activity.title} className="aspect-[16/12.8] size-full object-cover" src={primary} />
         </div>
         <div className="hidden grid-cols-2 gap-3 lg:grid">
           {secondary.slice(0, 4).map((imageUrl, index) => {
@@ -108,7 +152,7 @@ export function ActivityDetailGallery({ activity }: DetailSectionProps) {
               <div className="relative overflow-hidden rounded-travel-lg bg-travel-bg" key={`${imageUrl}-${index}`}>
                 <img
                   alt={`${activity.title} preview ${index + 2}`}
-                  className="aspect-[16/8.8] size-full object-cover"
+                  className="aspect-[16/13.2] size-full object-cover"
                   src={imageUrl}
                 />
                 {isLast ? (
@@ -170,6 +214,7 @@ export function ActivityDetailGallery({ activity }: DetailSectionProps) {
 
 export function ActivityBookingBox({ activity }: DetailSectionProps) {
   const { currency: displayCurrency } = useCurrency();
+  const { clearResults, setResults } = useAvailabilityResults();
   const isDesktopCalendar = useDesktopCalendar();
   const isDesktopBooking = isDesktopCalendar;
   const activeOptions = (activity.options ?? []).filter((option) => option.isActive);
@@ -177,45 +222,11 @@ export function ActivityBookingBox({ activity }: DetailSectionProps) {
   const [children, setChildren] = useState(0);
   const [openPanel, setOpenPanel] = useState<"date" | "travelers" | null>(null);
   const [selectedDate, setSelectedDate] = useState("");
-  const [availabilityModalOpen, setAvailabilityModalOpen] = useState(false);
-  const [selectedModalOptionId, setSelectedModalOptionId] = useState("");
-  const [selectedModalAvailabilityId, setSelectedModalAvailabilityId] = useState("");
   const [inlineError, setInlineError] = useState<string | null>(null);
-  const availablePackages = useMemo(
-    () =>
-      selectedDate
-        ? getAvailablePackages({
-            activity,
-            adults,
-            children,
-            selectedDate
-          })
-        : [],
-    [activity, adults, children, selectedDate]
-  );
-  const selectedPackage =
-    availablePackages.find((item) => item.option.id === selectedModalOptionId) ?? null;
-  const selectedPackageAvailability =
-    selectedPackage?.sessions.find((session) => session.id === selectedModalAvailabilityId) ??
-    selectedPackage?.sessions[0] ??
-    null;
-  const checkoutHref =
-    selectedPackage &&
-    `${routes.checkout(activity.slug)}?${new URLSearchParams({
-      adults: String(adults),
-      children: String(children),
-      optionId: selectedPackage.option.id,
-      ...(selectedPackage.option.availabilityMode === "ALWAYS_AVAILABLE"
-        ? { selectedDate }
-        : selectedPackageAvailability
-        ? { availabilityId: selectedPackageAvailability.id }
-        : {})
-    }).toString()}`;
   const childDiscountBadge = firstDiscountBadge(activeOptions, activity);
 
   function resetPackageSelection() {
-    setSelectedModalOptionId("");
-    setSelectedModalAvailabilityId("");
+    clearResults();
   }
 
   function selectDate(date: string) {
@@ -246,13 +257,13 @@ export function ActivityBookingBox({ activity }: DetailSectionProps) {
 
     setInlineError(null);
     const packages = getAvailablePackages({ activity, adults, children, selectedDate });
-    if (packages.length === 1) {
-      setSelectedModalOptionId(packages[0].option.id);
-      setSelectedModalAvailabilityId(packages[0].sessions[0]?.id ?? "");
-    } else {
-      resetPackageSelection();
-    }
-    setAvailabilityModalOpen(true);
+    setResults({ adults, children, packages, selectedDate });
+    window.setTimeout(() => {
+      document.getElementById("availability-results")?.scrollIntoView({
+        behavior: "smooth",
+        block: "start"
+      });
+    }, 0);
   }
 
   return (
@@ -288,7 +299,7 @@ export function ActivityBookingBox({ activity }: DetailSectionProps) {
                       <ChevronDown className="size-3.5 text-travel-muted" />
                     </button>
                   </PopoverTrigger>
-                  <PopoverContent align="center" className="w-auto max-w-[calc(100vw-2rem)] p-5">
+                  <PopoverContent align="end" alignOffset={0} className="w-auto max-w-[calc(100vw-2rem)] p-5">
                     <Calendar
                       disabled={(date) => isPastCalendarDate(date) || !isDateSelectableForActivity(activity, date)}
                       mode="single"
@@ -407,75 +418,6 @@ export function ActivityBookingBox({ activity }: DetailSectionProps) {
           </div>
         </>
       ) : null}
-
-      <Dialog
-        bodyClassName="px-4 pb-5 pt-4 sm:px-6 sm:pb-6"
-        description={
-          selectedDate
-            ? `Available for ${formatTravelDate(selectedDate)} · ${travelerSummary(adults, children)}`
-            : travelerSummary(adults, children)
-        }
-        mobileSheet
-        onClose={() => setAvailabilityModalOpen(false)}
-        open={availabilityModalOpen}
-        title="Choose your package"
-      >
-        <div className="grid gap-4">
-          {availablePackages.length ? (
-            availablePackages.map((item) => {
-              const isSelected = selectedPackage?.option.id === item.option.id;
-              const selectedSession =
-                item.sessions.find((session) => session.id === selectedModalAvailabilityId) ??
-                item.sessions[0] ??
-                null;
-
-              return (
-                <PackageOptionCard
-                  activity={activity}
-                  adults={adults}
-                  children={children}
-                  displayCurrency={displayCurrency}
-                  isSelected={isSelected}
-                  item={item}
-                  key={item.option.id}
-                  onSelect={() => {
-                    setSelectedModalOptionId(item.option.id);
-                    setSelectedModalAvailabilityId(item.sessions[0]?.id ?? "");
-                  }}
-                  onSessionChange={(availabilityId) => {
-                    setSelectedModalOptionId(item.option.id);
-                    setSelectedModalAvailabilityId(availabilityId);
-                  }}
-                  selectedDate={selectedDate}
-                  selectedSessionId={selectedSession?.id ?? ""}
-                />
-              );
-            })
-          ) : (
-            <div className="rounded-travel-lg border border-[#2B2B2B]/15 bg-travel-bg p-5 text-center">
-              <p className="font-brand text-lg font-semibold text-travel-dark">
-                No package options are available
-              </p>
-              <p className="mx-auto mt-2 max-w-md text-sm leading-6 text-travel-muted">
-                Try a different date or traveler count.
-              </p>
-            </div>
-          )}
-
-          <div className="flex flex-col-reverse gap-2 border-t border-[#2B2B2B]/10 pt-4 sm:flex-row sm:justify-end">
-            <ButtonCTA onClick={() => setAvailabilityModalOpen(false)} type="button" variant="ghost">
-              Cancel
-            </ButtonCTA>
-            <ButtonCTA
-              disabled={!checkoutHref || (selectedPackage?.option.availabilityMode === "SCHEDULED_SESSIONS" && !selectedPackageAvailability)}
-              href={checkoutHref || "#"}
-              type="button"
-            >
-              Continue to checkout
-            </ButtonCTA>
-          </div>
-        </div>
-      </Dialog>
 
       <Dialog
         bodyClassName="px-4 pb-5 pt-3 sm:px-6"
@@ -633,6 +575,254 @@ type AvailablePackage = {
   sessions: TravelActivityAvailability[];
 };
 
+export function ActivityAvailabilityResults({ activity }: DetailSectionProps) {
+  const { currency: displayCurrency } = useCurrency();
+  const { results } = useAvailabilityResults();
+  const [selectedOptionId, setSelectedOptionId] = useState("");
+  const [selectedAvailabilityId, setSelectedAvailabilityId] = useState("");
+
+  useEffect(() => {
+    const firstPackage = results?.packages[0];
+    setSelectedOptionId(firstPackage?.option.id ?? "");
+    setSelectedAvailabilityId(firstPackage?.sessions[0]?.id ?? "");
+  }, [results]);
+
+  if (!results) return null;
+
+  return (
+    <section className="scroll-mt-24 space-y-4" id="availability-results">
+      <div className={`rounded-travel-lg border ${containerOutlineClass} bg-white p-4 shadow-[0_12px_30px_rgba(26,26,26,0.06)] sm:p-5`}>
+        <div className="flex flex-col gap-2 sm:flex-row sm:items-end sm:justify-between">
+          <div>
+            <p className="font-interface text-xs font-semibold uppercase tracking-[0.08em] text-travel-primary">
+              Available packages
+            </p>
+            <h2 className="mt-1 font-brand text-[1.2rem] font-bold leading-tight text-travel-dark">
+              Choose your package
+            </h2>
+          </div>
+          <p className="font-interface text-sm leading-6 text-travel-muted">
+            {formatTravelDate(results.selectedDate)} · {travelerSummary(results.adults, results.children)}
+          </p>
+        </div>
+
+        {results.packages.length ? (
+          <div className="mt-5 space-y-3">
+            {results.packages.map((item, index) => {
+              const isSelected = item.option.id === selectedOptionId;
+              const selectedSession =
+                item.sessions.find((session) => session.id === selectedAvailabilityId) ??
+                item.sessions[0] ??
+                null;
+
+              return (
+                <InlinePackageOption
+                  activity={activity}
+                  adults={results.adults}
+                  children={results.children}
+                  displayCurrency={displayCurrency}
+                  isBestSeller={index === 0}
+                  isSelected={isSelected}
+                  item={item}
+                  key={item.option.id}
+                  onSelect={() => {
+                    setSelectedOptionId(item.option.id);
+                    setSelectedAvailabilityId(item.sessions[0]?.id ?? "");
+                  }}
+                  onSessionChange={setSelectedAvailabilityId}
+                  selectedDate={results.selectedDate}
+                  selectedSession={selectedSession}
+                />
+              );
+            })}
+          </div>
+        ) : (
+          <div className="mt-5 rounded-travel-lg border border-[#2B2B2B]/15 bg-travel-bg p-5">
+            <p className="font-interface text-sm font-semibold text-travel-dark">
+              No package options are available for this date and traveler count.
+            </p>
+            <p className="mt-1 font-interface text-sm leading-6 text-travel-muted">
+              Update the date or traveler count and check availability again.
+            </p>
+          </div>
+        )}
+      </div>
+
+    </section>
+  );
+}
+
+function InlinePackageOption({
+  activity,
+  adults,
+  children,
+  displayCurrency,
+  isBestSeller,
+  isSelected,
+  item,
+  onSelect,
+  onSessionChange,
+  selectedDate,
+  selectedSession
+}: {
+  activity: TravelActivity;
+  adults: number;
+  children: number;
+  displayCurrency: Parameters<typeof formatMoney>[1];
+  isBestSeller: boolean;
+  isSelected: boolean;
+  item: AvailablePackage;
+  onSelect: () => void;
+  onSessionChange: (availabilityId: string) => void;
+  selectedDate: string;
+  selectedSession: TravelActivityAvailability | null;
+}) {
+  const totalTravelers = adults + children;
+  const unitPrice = Math.round(item.estimate.totalAmountCents / Math.max(totalTravelers, 1));
+  const checkoutHref = packageCheckoutHref({
+    activity,
+    adults,
+    children,
+    item,
+    selectedDate,
+    selectedSession
+  });
+
+  return (
+    <article
+      className={[
+        "relative overflow-hidden rounded-travel-lg border bg-white transition",
+        isSelected ? "border-travel-primary shadow-[0_12px_28px_rgba(185,34,22,0.08)]" : "border-[#2B2B2B]/20"
+      ].join(" ")}
+    >
+      {isSelected && isBestSeller ? (
+        <span className="absolute left-5 top-0 -translate-y-1/2 rounded-full bg-[#FBEAE8] px-3 py-1 font-interface text-[11px] font-semibold text-travel-primary">
+          Best seller
+        </span>
+      ) : null}
+
+      <button
+        className="grid w-full items-center gap-4 p-4 text-left sm:grid-cols-[minmax(0,1fr)_260px]"
+        onClick={onSelect}
+        type="button"
+      >
+        <div className="flex min-w-0 items-start gap-3">
+          <span
+            className={[
+              "mt-1 flex size-5 shrink-0 items-center justify-center rounded-full border",
+              isSelected ? "border-travel-primary" : "border-[#2B2B2B]/45"
+            ].join(" ")}
+          >
+            {isSelected ? <span className="size-2.5 rounded-full bg-travel-primary" /> : null}
+          </span>
+          <div className="min-w-0">
+            <h3 className="font-brand text-[1rem] font-semibold leading-tight text-travel-dark">
+              {item.option.title}
+            </h3>
+            {!isSelected ? (
+              <p className="mt-1 line-clamp-1 font-interface text-sm leading-6 text-travel-muted">
+                {item.option.description ?? activity.summary}
+              </p>
+            ) : null}
+          </div>
+        </div>
+
+        <PackagePriceSummary
+          displayCurrency={displayCurrency}
+          estimate={item.estimate}
+          totalTravelers={totalTravelers}
+          unitPrice={unitPrice}
+        />
+      </button>
+
+      {isSelected ? (
+        <div className="grid border-t border-[#2B2B2B]/14 sm:grid-cols-[minmax(0,1fr)_300px]">
+          <div className="space-y-4 p-4 sm:p-5">
+            <div className={detailBodyClassName}>
+              <p>{item.option.description ?? activity.summary}</p>
+              <div className="mt-3 flex flex-wrap gap-x-5 gap-y-1 font-semibold text-travel-dark">
+                <span>Duration: {item.option.durationLabel ?? activity.durationLabel ?? activity.duration}</span>
+                {item.option.availabilityMode === "ALWAYS_AVAILABLE" ? (
+                  <span>{formatTravelDate(selectedDate)}</span>
+                ) : selectedSession ? (
+                  <span>{formatSessionDate(selectedSession.startDateTime)}</span>
+                ) : null}
+                {item.option.dailyCapacity ? <span>Daily capacity {item.option.dailyCapacity}</span> : null}
+              </div>
+            </div>
+
+            {item.option.availabilityMode === "SCHEDULED_SESSIONS" && item.sessions.length > 1 ? (
+              <div className="flex flex-wrap gap-2">
+                {item.sessions.map((session) => (
+                  <button
+                    className={[
+                      "rounded-[10px] border px-4 py-2 font-interface text-sm font-semibold transition",
+                      selectedSession?.id === session.id
+                        ? "border-travel-primary bg-travel-primary text-white"
+                        : "border-travel-primary bg-white text-travel-primary hover:bg-[#FBEAE8]"
+                    ].join(" ")}
+                    key={session.id}
+                    onClick={() => onSessionChange(session.id)}
+                    type="button"
+                  >
+                    {new Intl.DateTimeFormat("en-US", { hour: "numeric", minute: "2-digit" }).format(new Date(session.startDateTime))}
+                  </button>
+                ))}
+              </div>
+            ) : null}
+
+            <div className="grid gap-3 rounded-travel-md bg-[#F3FAF7] p-4 font-interface text-sm leading-6 text-travel-dark">
+              <TrustLine compact description={`before ${formatTravelDate(selectedDate)}`} title="Free cancellation" />
+              <TrustLine compact description="Book your spot and pay nothing today" title="Reserve now, pay later" />
+            </div>
+          </div>
+
+          <div className="flex flex-col justify-center gap-3 border-t border-[#2B2B2B]/14 p-4 sm:border-l sm:border-t-0 sm:p-5">
+            <PackagePriceSummary
+              displayCurrency={displayCurrency}
+              estimate={item.estimate}
+              totalTravelers={totalTravelers}
+              unitPrice={unitPrice}
+              large
+            />
+            <ButtonCTA fullWidth href={checkoutHref} size="lg" variant="outline">
+              Reserve Now & Pay Later
+            </ButtonCTA>
+            <ButtonCTA fullWidth href={checkoutHref} size="lg">
+              Book Now
+            </ButtonCTA>
+          </div>
+        </div>
+      ) : null}
+    </article>
+  );
+}
+
+function PackagePriceSummary({
+  displayCurrency,
+  estimate,
+  large = false,
+  totalTravelers,
+  unitPrice
+}: {
+  displayCurrency: Parameters<typeof formatMoney>[1];
+  estimate: AvailablePackage["estimate"];
+  large?: boolean;
+  totalTravelers: number;
+  unitPrice: number;
+}) {
+  return (
+    <div className={large ? "text-left sm:text-right" : "text-left sm:text-right"}>
+      <p className={`font-interface font-bold text-travel-dark ${large ? "text-xl" : "text-base"}`}>
+        {formatMoney(estimate.totalAmountCents, displayCurrency)}
+      </p>
+      <p className="mt-0.5 font-interface text-xs leading-5 text-travel-dark">
+        {totalTravelers} {totalTravelers === 1 ? "Traveler" : "Travelers"} x {formatMoney(unitPrice, displayCurrency)}
+      </p>
+    </div>
+  );
+}
+
 function PackageOptionCard({
   activity,
   adults,
@@ -668,15 +858,19 @@ function PackageOptionCard({
       <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
         <div className="min-w-0">
           <div className="flex flex-wrap items-center gap-2">
-            <h3 className="font-brand text-lg font-semibold text-travel-dark">{option.title}</h3>
-            <span className="rounded-full bg-travel-bg px-2.5 py-1 text-[11px] font-semibold text-travel-muted">
+            <h3 className="font-brand text-[1.02rem] font-semibold leading-tight text-travel-dark">
+              {option.title}
+            </h3>
+            <span className="rounded-full bg-travel-bg px-2.5 py-1 text-[11px] font-medium text-travel-muted">
               {option.availabilityMode === "ALWAYS_AVAILABLE" ? "Available every day" : "Scheduled session"}
             </span>
           </div>
           {option.description ? (
-            <p className="mt-2 text-sm leading-6 text-travel-muted">{option.description}</p>
+            <p className="mt-2 font-interface text-[14px] leading-6 text-travel-dark/75">
+              {option.description}
+            </p>
           ) : null}
-          <div className="mt-3 flex flex-wrap gap-x-4 gap-y-1 text-xs font-medium text-travel-muted">
+          <div className="mt-3 flex flex-wrap gap-x-4 gap-y-1 font-interface text-[12px] font-medium text-travel-muted">
             {option.durationLabel ?? activity.durationLabel ? (
               <span>{option.durationLabel ?? activity.durationLabel}</span>
             ) : null}
@@ -697,13 +891,13 @@ function PackageOptionCard({
 
       {option.availabilityMode === "SCHEDULED_SESSIONS" && sessions.length > 1 ? (
         <div className="mt-4 rounded-travel-md border border-[#2B2B2B]/10 bg-white p-3">
-          <p className="mb-2 text-xs font-semibold uppercase tracking-[0.08em] text-travel-muted">
+          <p className="mb-2 font-interface text-[11px] font-semibold uppercase tracking-[0.08em] text-travel-muted">
             Session time
           </p>
           <div className="grid gap-2">
             {sessions.map((session) => (
               <button
-                className={`rounded-travel-md border px-3 py-2 text-left text-sm transition ${
+                className={`rounded-travel-md border px-3 py-2 text-left font-interface text-[14px] leading-6 transition ${
                   selectedSessionId === session.id
                     ? "border-travel-primary bg-[#FBEAE8] text-travel-primary"
                     : "border-[#2B2B2B]/10 hover:bg-travel-bg"
@@ -713,14 +907,14 @@ function PackageOptionCard({
                 type="button"
               >
                 <span className="font-semibold">{formatSessionDate(session.startDateTime)}</span>
-                <span className="ml-2 text-xs text-travel-muted">{remainingCapacity(session)} spots left</span>
+                <span className="ml-2 text-[12px] text-travel-muted">{remainingCapacity(session)} spots left</span>
               </button>
             ))}
           </div>
         </div>
       ) : null}
 
-      <div className="mt-4 grid gap-2 rounded-travel-md bg-travel-bg p-3 text-sm">
+      <div className="mt-4 grid gap-2 rounded-travel-md bg-travel-bg p-3 font-interface text-[14px] leading-6">
         <PriceLine
           label={`Adult x ${adults}`}
           value={formatMoney(estimate.adultLineTotalCents, displayCurrency)}
@@ -737,7 +931,7 @@ function PackageOptionCard({
           value={formatMoney(estimate.totalAmountCents, displayCurrency)}
         />
         {displayCurrency !== "USD" ? (
-          <p className="pt-1 text-xs text-travel-muted">
+          <p className="pt-1 text-[12px] text-travel-muted">
             Base charge in USD: {formatMoney(estimate.totalAmountCents, "USD")}
           </p>
         ) : null}
@@ -797,7 +991,7 @@ function getAvailablePackages({
 
     const sessions = (option.availability ?? activity.availability ?? [])
       .filter((session) => session.isActive)
-      .filter((session) => dateToIsoDate(new Date(session.startDateTime)) === selectedDate)
+      .filter((session) => availabilityDateValue(session.startDateTime) === selectedDate)
       .filter((session) => remainingCapacity(session) >= totalTravelers);
 
     if (!sessions.length) return [];
@@ -814,11 +1008,42 @@ function firstDiscountBadge(options: TravelActivityOption[], activity: TravelAct
 
 function PriceLine({ label, value, strong = false }: { label: string; value: string; strong?: boolean }) {
   return (
-    <div className={`flex items-center justify-between gap-4 ${strong ? "font-semibold text-travel-dark" : "text-travel-muted"}`}>
+    <div
+      className={`flex items-center justify-between gap-4 ${
+        strong ? "font-semibold text-travel-dark" : "text-travel-dark/75"
+      }`}
+    >
       <span>{label}</span>
       <span>{value}</span>
     </div>
   );
+}
+
+function packageCheckoutHref({
+  activity,
+  adults,
+  children,
+  item,
+  selectedDate,
+  selectedSession
+}: {
+  activity: TravelActivity;
+  adults: number;
+  children: number;
+  item: AvailablePackage;
+  selectedDate: string;
+  selectedSession: TravelActivityAvailability | null;
+}) {
+  return `${routes.checkout(activity.slug)}?${new URLSearchParams({
+    adults: String(adults),
+    children: String(children),
+    optionId: item.option.id,
+    ...(item.option.availabilityMode === "ALWAYS_AVAILABLE"
+      ? { selectedDate }
+      : selectedSession
+      ? { availabilityId: selectedSession.id }
+      : {})
+  }).toString()}`;
 }
 
 function todayInputValue() {
@@ -869,7 +1094,7 @@ function isDateSelectableForActivity(activity: TravelActivity, date: Date) {
 
   if (!options.length) {
     return (activity.availability ?? []).some(
-      (session) => session.isActive && dateToIsoDate(new Date(session.startDateTime)) === isoDate
+      (session) => session.isActive && availabilityDateValue(session.startDateTime) === isoDate
     );
   }
 
@@ -879,7 +1104,7 @@ function isDateSelectableForActivity(activity: TravelActivity, date: Date) {
     }
 
     return option.availability.some(
-      (session) => session.isActive && dateToIsoDate(new Date(session.startDateTime)) === isoDate
+      (session) => session.isActive && availabilityDateValue(session.startDateTime) === isoDate
     );
   });
 }
@@ -921,6 +1146,24 @@ function formatSessionDate(value: string) {
   }).format(new Date(value));
 }
 
+function availabilityDateValue(value: string) {
+  if (value.includes("T")) {
+    return value.slice(0, 10);
+  }
+
+  return dateToIsoDate(new Date(value));
+}
+
+function buildActivityEyebrow(activity: TravelActivity) {
+  const locationParts = activity.location
+    .split(",")
+    .map((part) => part.trim())
+    .filter(Boolean);
+  const values = [activity.country, activity.city, ...locationParts].filter(Boolean);
+
+  return values.filter((value, index) => values.indexOf(value) === index).join(" / ");
+}
+
 export function AboutActivitySection({ activity }: DetailSectionProps) {
   const items = getAboutItems(activity);
 
@@ -956,11 +1199,11 @@ export function ActivityItinerarySection({ activity }: DetailSectionProps) {
         <div className="space-y-0">
           {itinerary.map((item, index) => (
             <div className="grid grid-cols-[28px_1fr] gap-4" key={`${item.title}-${index}`}>
-              <div className="flex flex-col items-center">
-                <span className="mt-1 block size-3 rounded-full bg-travel-primary" />
+              <div className="relative flex justify-center">
                 {index < itinerary.length - 1 ? (
-                  <span className="-mt-0.5 h-full min-h-14 w-px bg-travel-border" />
+                  <span className="absolute left-1/2 top-[12px] h-[calc(100%-12px)] w-px -translate-x-1/2 bg-travel-border" />
                 ) : null}
+                <span className="relative mt-1 block size-3 rounded-full bg-travel-primary" />
               </div>
               <div className="pb-5">
                 <div className="flex flex-wrap items-baseline justify-between gap-2">
@@ -1066,7 +1309,7 @@ function DetailSection({
   children: ReactNode;
 }) {
   return (
-    <section className={`scroll-mt-24 border-t ${containerOutlineClass} pt-8`} id={id}>
+    <section className={`scroll-mt-24 border-t ${containerOutlineClass} pt-7 pb-3`} id={id}>
       <h2 className="font-brand text-[1.12rem] font-bold leading-tight text-travel-dark sm:text-[1.2rem]">
         {title}
       </h2>
@@ -1078,14 +1321,16 @@ function DetailSection({
 function SplitDetailSection({
   id,
   title,
-  children
+  children,
+  className
 }: {
   id?: string;
   title: string;
   children: ReactNode;
+  className?: string;
 }) {
   return (
-    <section className={`scroll-mt-24 border-t ${containerOutlineClass} py-5`} id={id}>
+    <section className={`scroll-mt-24 border-t ${containerOutlineClass} pt-7 pb-3 ${className ?? ""}`} id={id}>
       <div className="grid items-start gap-3 md:grid-cols-[150px_minmax(0,1fr)] md:gap-5">
         <h2 className="font-brand text-[1.05rem] font-bold leading-tight text-travel-dark sm:text-[1.1rem]">
           {title}

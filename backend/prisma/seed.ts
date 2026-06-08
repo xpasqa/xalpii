@@ -165,245 +165,104 @@ const categories: CategorySeed[] = [
 
 const activities: ActivitySeed[] = [
   {
-    title: "Ubud Cooking Class & Market Visit",
-    slug: "ubud-cooking-class-market-visit",
+    title: "Nusa Penida One Day Trip with All-inclusive",
+    slug: "nusa-penida-one-day-trip-all-inclusive",
     citySlug: "bali",
-    destinationSlug: "ubud",
-    categorySlug: "food-cooking",
-    shortDescription: "Shop a traditional market, visit a local farm, and cook Balinese dishes.",
-    description:
-      "Begin with a guided visit to Ubud's morning market before heading to a family compound for a hands-on cooking session. Learn practical techniques, local context, and the stories behind classic Balinese dishes.",
-    durationLabel: "3.5 hours",
-    meetingPoint: "Ubud Central Market entrance, near the main parking area.",
-    cancellationPolicy: "Cancel up to 24 hours in advance for a full refund.",
-    importantInfo: "Please share dietary needs before the activity. Comfortable shoes are recommended.",
-    ratingAverage: "4.9",
-    reviewCount: 1248,
-    currency: "USD",
-    priceCents: 8000,
-    coverUrl:
-      "https://images.unsplash.com/photo-1556910103-1c02745aae4d?auto=format&fit=crop&w=1400&q=80",
-    highlights: [
-      "Explore Ubud's traditional market with a local host",
-      "Cook classic Balinese dishes in a family compound",
-      "Enjoy a shared lunch after the cooking session"
-    ],
-    included: ["Market tour", "Farm visit", "Cooking class", "Lunch", "Recipe notes"],
-    notIncluded: ["Hotel transfer", "Personal expenses", "Tips"],
-    itinerary: [
-      { title: "Ubud Traditional Market", subtitle: "Ingredient walk with your host", durationLabel: "35 minutes" },
-      { title: "Local Farm Visit", subtitle: "Fresh herbs, spices, and seasonal produce", durationLabel: "30 minutes" },
-      { title: "Family Compound", subtitle: "Welcome drink and cooking setup", durationLabel: "20 minutes" },
-      { title: "Cooking Session", subtitle: "Prepare several Balinese dishes", durationLabel: "90 minutes" },
-      { title: "Shared Lunch", subtitle: "Sit down together and enjoy the meal", durationLabel: "45 minutes" }
-    ]
-  },
-  {
-    title: "Mount Batur Sunrise Jeep Adventure",
-    slug: "mount-batur-sunrise-jeep-adventure",
-    citySlug: "bali",
-    destinationSlug: "kintamani",
+    destinationSlug: "nusa-penida",
     categorySlug: "adventure",
-    shortDescription: "Ride by jeep through volcanic landscapes and watch sunrise over Mount Batur.",
+    shortDescription:
+      "Visit Nusa Penida's signature cliffs, beaches, and island viewpoints in one polished all-inclusive day trip from Bali.",
     description:
-      "Travel before dawn to the Mount Batur area for a guided jeep route across volcanic terrain. Watch the sunrise, visit the black lava field, and close the morning with coffee plantation views.",
-    durationLabel: "5 hours",
-    meetingPoint: "Hotel pickup is available from selected Bali areas.",
+      "Travel from Bali to Nusa Penida for a full-day island route with boat tickets, local transfers, guided coordination, and curated scenic stops included. The experience is designed for travelers who want a smooth one-day island escape with strong logistics, memorable viewpoints, and a clear end-to-end route.",
+    durationLabel: "10 hours",
+    meetingPoint: "Pickup from selected Bali areas before the fast boat departure.",
     cancellationPolicy: "Cancel up to 24 hours in advance for a full refund.",
-    importantInfo: "Bring a light jacket. Sunrise visibility depends on weather conditions.",
+    importantInfo:
+      "Bring sun protection, comfortable shoes, and a light layer for the boat crossing. Schedule and sea conditions may shift based on weather.",
     ratingAverage: "4.8",
     reviewCount: 932,
     currency: "USD",
-    priceCents: 8000,
+    priceCents: 10080,
     coverUrl:
-      "https://images.unsplash.com/photo-1500530855697-b586d89ba3ee?auto=format&fit=crop&w=1400&q=80",
+      "https://images.unsplash.com/photo-1577717903315-1691ae25ab3f?auto=format&fit=crop&w=1400&q=80",
     highlights: [
-      "Watch sunrise from a scenic Mount Batur viewpoint",
-      "Cross black lava terrain by jeep",
-      "Visit a local coffee plantation after the route"
+      "Round-trip transfers from your Bali hotel to the island are included",
+      "An English-speaking driver/guide will show you around the island",
+      "An Indonesian lunch is included in the price of the tour",
+      "Private tour for just you and your party"
     ],
-    included: ["Jeep ride", "Driver guide", "Coffee plantation visit", "Selected area pickup"],
-    notIncluded: ["Breakfast", "Personal expenses", "Tips"],
+    included: [
+      "Pick up and drop off",
+      "Indonesian lunch",
+      "A private car tour at Nusa Penida Island and Bali with English speaking driver",
+      "Entry/Admission",
+      "Fastboat return ticket"
+    ],
+    notIncluded: ["Souvenir photos", "Personal expense", "Gratitude (Optional)", "Insurance"],
     itinerary: [
-      { title: "Hotel pickup", subtitle: "Early morning pickup from selected locations", type: "start" },
-      { title: "Sunrise Jeep Ride", subtitle: "Scenic viewpoint near Mount Batur", durationLabel: "90 minutes" },
-      { title: "Black Lava Field", subtitle: "Volcanic landscape photo stops", durationLabel: "45 minutes" },
-      { title: "Coffee Plantation", subtitle: "Local coffee and tea tasting", durationLabel: "45 minutes" },
-      { title: "Drop-off", subtitle: "Return to your pickup area", type: "end" }
-    ]
-  },
-  {
-    title: "Tokyo Tea Ceremony Experience",
-    slug: "tokyo-tea-ceremony-experience",
-    citySlug: "tokyo",
-    destinationSlug: "tokyo",
-    categorySlug: "cultural-experience",
-    shortDescription: "Join a calm tea ceremony session guided by a Tokyo host.",
-    description:
-      "Step into a quiet tea room and learn the rhythm, etiquette, and meaning behind Japanese tea ceremony. This compact session is designed for travelers who want a respectful cultural introduction.",
-    durationLabel: "75 minutes",
-    meetingPoint: "Tea room address near Asakusa Station.",
-    cancellationPolicy: "Cancel up to 24 hours in advance for a full refund.",
-    importantInfo: "Please arrive 10 minutes early. Socks are recommended.",
-    ratingAverage: "4.9",
-    reviewCount: 812,
-    currency: "USD",
-    priceCents: 8000,
-    coverUrl:
-      "https://images.unsplash.com/photo-1545569341-9eb8b30979d9?auto=format&fit=crop&w=1400&q=80",
-    highlights: ["Learn tea ceremony etiquette", "Taste matcha and seasonal sweets", "Small-group cultural setting"],
-    included: ["Tea ceremony host", "Matcha", "Seasonal sweets"],
-    notIncluded: ["Hotel transfer", "Kimono rental"],
-    itinerary: [
-      { title: "Welcome", subtitle: "Introduction to the tea room" },
-      { title: "Tea Ceremony", subtitle: "Guided matcha preparation", durationLabel: "50 minutes" },
-      { title: "Questions", subtitle: "Short conversation with your host", durationLabel: "15 minutes" }
-    ]
-  },
-  {
-    title: "Asakusa Food Walk",
-    slug: "asakusa-food-walk",
-    citySlug: "tokyo",
-    destinationSlug: "tokyo",
-    categorySlug: "food-cooking",
-    shortDescription: "Taste street food and local snacks around historic Asakusa.",
-    description:
-      "Follow a local guide through side streets, snack counters, and traditional shops around Asakusa. Learn how food, neighborhood history, and local rituals connect.",
-    durationLabel: "2.5 hours",
-    meetingPoint: "Kaminarimon Gate, Asakusa.",
-    cancellationPolicy: "Cancel up to 24 hours in advance for a full refund.",
-    importantInfo: "The route includes walking and standing tastings.",
-    ratingAverage: "4.7",
-    reviewCount: 546,
-    currency: "USD",
-    priceCents: 8000,
-    coverUrl:
-      "https://images.unsplash.com/photo-1503899036084-c55cdd92da26?auto=format&fit=crop&w=1400&q=80",
-    highlights: ["Taste local snacks", "Explore Asakusa side streets", "Learn neighborhood context from a guide"],
-    included: ["Guide", "Food tastings", "Route notes"],
-    notIncluded: ["Extra drinks", "Hotel transfer"],
-    itinerary: [
-      { title: "Kaminarimon Gate", subtitle: "Meet your guide" },
-      { title: "Nakamise Area", subtitle: "Classic street snacks", durationLabel: "45 minutes" },
-      { title: "Local Shops", subtitle: "Savory tastings and sweets", durationLabel: "75 minutes" },
-      { title: "Asakusa Backstreets", subtitle: "Neighborhood context", durationLabel: "30 minutes" }
-    ]
-  },
-  {
-    title: "Paris Hidden Courtyard Walking Tour",
-    slug: "paris-hidden-courtyard-walking-tour",
-    citySlug: "paris",
-    destinationSlug: "paris",
-    categorySlug: "guided-tour",
-    shortDescription: "Walk through quieter Paris passages, courtyards, and local stories.",
-    description:
-      "Take a measured route through historic passages and hidden courtyards with a guide who connects architecture, daily life, and neighborhood history.",
-    durationLabel: "2 hours",
-    meetingPoint: "Near Palais Royal, exact point shared after booking.",
-    cancellationPolicy: "Cancel up to 24 hours in advance for a full refund.",
-    importantInfo: "Wear comfortable shoes and dress for the weather.",
-    ratingAverage: "4.8",
-    reviewCount: 421,
-    currency: "USD",
-    priceCents: 8000,
-    coverUrl:
-      "https://images.unsplash.com/photo-1502602898657-3e91760cbb34?auto=format&fit=crop&w=1400&q=80",
-    highlights: ["See hidden passages", "Understand Parisian courtyard history", "Small-group walking pace"],
-    included: ["Local guide", "Curated walking route"],
-    notIncluded: ["Food and drinks", "Museum entry"],
-    itinerary: [
-      { title: "Palais Royal", subtitle: "Start the walk" },
-      { title: "Covered Passages", subtitle: "Architecture and stories", durationLabel: "50 minutes" },
-      { title: "Hidden Courtyards", subtitle: "Quiet residential corners", durationLabel: "50 minutes" }
-    ]
-  },
-  {
-    title: "Seine Evening Cruise",
-    slug: "seine-evening-cruise",
-    citySlug: "paris",
-    destinationSlug: "paris",
-    categorySlug: "water-activity",
-    shortDescription: "See Paris from the river during a relaxed evening cruise.",
-    description:
-      "Board a calm Seine cruise and pass Paris landmarks as the city shifts into evening light. A simple, scenic way to orient yourself in the city.",
-    durationLabel: "75 minutes",
-    meetingPoint: "Seine river pier near the Eiffel Tower.",
-    cancellationPolicy: "Cancel up to 24 hours in advance for a full refund.",
-    importantInfo: "Arrive 15 minutes before departure. Seating is first come, first served.",
-    ratingAverage: "4.6",
-    reviewCount: 1004,
-    currency: "USD",
-    priceCents: 8000,
-    coverUrl:
-      "https://images.unsplash.com/photo-1499856871958-5b9627545d1a?auto=format&fit=crop&w=1400&q=80",
-    highlights: ["Cruise past major Paris landmarks", "Enjoy evening river views", "Easy meeting point near central Paris"],
-    included: ["Cruise ticket", "Audio commentary"],
-    notIncluded: ["Hotel transfer", "Food and drinks"],
-    itinerary: [
-      { title: "Boarding", subtitle: "Meet at the pier" },
-      { title: "Seine Cruise", subtitle: "Landmark route along the river", durationLabel: "75 minutes" }
-    ]
-  },
-  {
-    title: "Zurich Old Town & Chocolate Walk",
-    slug: "zurich-old-town-chocolate-walk",
-    citySlug: "zurich",
-    destinationSlug: "zurich",
-    categorySlug: "food-cooking",
-    shortDescription: "Explore Zurich lanes with chocolate tastings and local context.",
-    description:
-      "Walk through Zurich's old town with a local host and stop for selected chocolate tastings. The route balances city context with a calm tasting experience.",
-    durationLabel: "2 hours",
-    meetingPoint: "Zurich HB main hall meeting point.",
-    cancellationPolicy: "Cancel up to 24 hours in advance for a full refund.",
-    importantInfo: "Some tastings may contain dairy or nuts.",
-    ratingAverage: "4.8",
-    reviewCount: 388,
-    currency: "USD",
-    priceCents: 8000,
-    coverUrl:
-      "https://images.unsplash.com/photo-1561136594-7f68413baa99?auto=format&fit=crop&w=1400&q=80",
-    highlights: ["Taste Swiss chocolate", "Walk Zurich old town", "Learn local food and city history"],
-    included: ["Guide", "Chocolate tastings"],
-    notIncluded: ["Hotel transfer", "Extra purchases"],
-    itinerary: [
-      { title: "Zurich HB", subtitle: "Meet your guide" },
-      { title: "Old Town Lanes", subtitle: "Historic context", durationLabel: "45 minutes" },
-      { title: "Chocolate Stops", subtitle: "Curated tastings", durationLabel: "60 minutes" }
-    ]
-  },
-  {
-    title: "Lake Zurich Paddle Experience",
-    slug: "lake-zurich-paddle-experience",
-    citySlug: "zurich",
-    destinationSlug: "zurich",
-    categorySlug: "water-activity",
-    shortDescription: "Paddle a calm section of Lake Zurich with a local instructor.",
-    description:
-      "Enjoy a relaxed paddle session on Lake Zurich with safety briefing, local guidance, and time on the water. Designed for travelers who want a gentle outdoor break.",
-    durationLabel: "90 minutes",
-    meetingPoint: "Lake Zurich rental point, exact address shared after booking.",
-    cancellationPolicy: "Cancel up to 24 hours in advance for a full refund.",
-    importantInfo: "Activity depends on safe weather and lake conditions.",
-    ratingAverage: "4.7",
-    reviewCount: 214,
-    currency: "USD",
-    priceCents: 8000,
-    coverUrl:
-      "https://images.unsplash.com/photo-1500534314209-a25ddb2bd429?auto=format&fit=crop&w=1400&q=80",
-    highlights: ["Paddle Lake Zurich", "Beginner-friendly briefing", "Calm outdoor city escape"],
-    included: ["Paddle equipment", "Instructor", "Safety briefing"],
-    notIncluded: ["Swimwear", "Locker rental"],
-    itinerary: [
-      { title: "Check-in", subtitle: "Meet the instructor" },
-      { title: "Safety Briefing", subtitle: "Equipment and technique", durationLabel: "20 minutes" },
-      { title: "Lake Paddle", subtitle: "Guided water time", durationLabel: "60 minutes" }
+      {
+        title: "Hotel pickup",
+        subtitle: "Early pickup from selected Bali areas and transfer to the harbor",
+        durationLabel: "60 minutes",
+        type: "start"
+      },
+      {
+        title: "Fast boat crossing",
+        subtitle: "Board the morning boat to Nusa Penida",
+        durationLabel: "45 minutes",
+        type: "stop"
+      },
+      {
+        title: "Kelingking viewpoint",
+        subtitle: "Scenic cliff viewpoint and photo stop",
+        durationLabel: "45 minutes",
+        type: "stop"
+      },
+      {
+        title: "Angel's Billabong & Broken Beach",
+        subtitle: "Explore the island's dramatic coastal formations",
+        durationLabel: "60 minutes",
+        type: "activity"
+      },
+      {
+        title: "Local lunch",
+        subtitle: "Enjoy an included Indonesian lunch",
+        durationLabel: "45 minutes",
+        type: "food"
+      },
+      {
+        title: "Crystal Bay",
+        subtitle: "Relaxed coastal stop before the return route",
+        durationLabel: "45 minutes",
+        type: "stop"
+      },
+      {
+        title: "Return to Bali",
+        subtitle: "Fast boat and transfer back to your pickup area",
+        durationLabel: "2 hours",
+        type: "end"
+      }
     ]
   }
 ];
 
 async function main() {
   const demoPasswordHash = await bcrypt.hash(demoPassword, 12);
+
+  await prisma.bookingParticipant.deleteMany();
+  await prisma.payment.deleteMany();
+  await prisma.voucher.deleteMany();
+  await prisma.review.deleteMany();
+  await prisma.booking.deleteMany();
+  await prisma.activityRevision.deleteMany();
+  await prisma.activityOptionDateInventory.deleteMany();
+  await prisma.activityAvailability.deleteMany();
+  await prisma.activityOptionPricingTier.deleteMany();
+  await prisma.activityOption.deleteMany();
+  await prisma.activityPricingTier.deleteMany();
+  await prisma.activityPricing.deleteMany();
+  await prisma.activityMedia.deleteMany();
+  await prisma.activity.deleteMany();
 
   const adminUser = await prisma.user.upsert({
     where: { email: "admin@alpii.local" },
@@ -705,6 +564,7 @@ async function seedDestinations() {
   await upsertDestination({ name: "Canggu", slug: "canggu", type: DestinationType.AREA, parentSlug: "bali", sortOrder: 3 });
   await upsertDestination({ name: "Seminyak", slug: "seminyak", type: DestinationType.AREA, parentSlug: "bali", sortOrder: 4 });
   await upsertDestination({ name: "Kintamani", slug: "kintamani", type: DestinationType.AREA, parentSlug: "bali", sortOrder: 5 });
+  await upsertDestination({ name: "Nusa Penida", slug: "nusa-penida", type: DestinationType.AREA, parentSlug: "bali", sortOrder: 6 });
 
   await upsertDestination({ name: "Japan", slug: "japan", type: DestinationType.COUNTRY, countryCode: "JP", sortOrder: 2 });
   await upsertDestination({ name: "Tokyo", slug: "tokyo", type: DestinationType.CITY, parentSlug: "japan", sortOrder: 1 });
@@ -726,54 +586,30 @@ async function seedDestinations() {
 }
 
 function buildOptionSeeds(activity: ActivitySeed): ActivityOptionSeed[] {
-  if (activity.slug === "mount-batur-sunrise-jeep-adventure") {
+  if (activity.slug === "nusa-penida-one-day-trip-all-inclusive") {
     return [
       {
-        title: "Guide only",
-        slug: "guide-only",
-        availabilityMode: AvailabilityMode.SCHEDULED_SESSIONS,
+        title: "Standard experience + Ticket only",
+        slug: "standard-experience-ticket-only",
+        description:
+          "Hike-free island day covering the signature west-side Nusa Penida viewpoints with ticketing and on-island transport coordinated.",
+        availabilityMode: AvailabilityMode.ALWAYS_AVAILABLE,
+        availableDays: ["MONDAY", "TUESDAY", "WEDNESDAY", "THURSDAY", "FRIDAY", "SATURDAY", "SUNDAY"],
+        dailyCapacity: 30,
         isDefault: true,
         sortOrder: 0,
-        tierMultiplier: 0.85
-      },
-      {
-        title: "Guide + breakfast",
-        slug: "guide-breakfast",
-        availabilityMode: AvailabilityMode.SCHEDULED_SESSIONS,
-        sortOrder: 1,
         tierMultiplier: 1
       },
       {
-        title: "Private guide + breakfast",
-        slug: "private-guide-breakfast",
+        title: "Nusa Penida Tour + Snorkeling",
+        slug: "nusa-penida-tour-snorkeling",
+        description:
+          "Adds a snorkeling stop to the core island route while keeping transfers, local coordination, and a structured day plan included.",
         availabilityMode: AvailabilityMode.ALWAYS_AVAILABLE,
         availableDays: ["MONDAY", "TUESDAY", "WEDNESDAY", "THURSDAY", "FRIDAY", "SATURDAY", "SUNDAY"],
-        dailyCapacity: 10,
-        sortOrder: 2,
-        tierMultiplier: 1.45
-      }
-    ];
-  }
-
-  if (activity.slug === "ubud-cooking-class-market-visit") {
-    return [
-      {
-        title: "Standard experience",
-        slug: "standard-experience",
-        availabilityMode: AvailabilityMode.ALWAYS_AVAILABLE,
-        availableDays: ["MONDAY", "TUESDAY", "WEDNESDAY", "THURSDAY", "FRIDAY", "SATURDAY", "SUNDAY"],
-        dailyCapacity: 12,
-        isDefault: true,
-        sortOrder: 0
-      },
-      {
-        title: "Private family kitchen",
-        slug: "private-family-kitchen",
-        availabilityMode: AvailabilityMode.ALWAYS_AVAILABLE,
-        availableDays: ["MONDAY", "WEDNESDAY", "FRIDAY", "SATURDAY"],
-        dailyCapacity: 8,
+        dailyCapacity: 20,
         sortOrder: 1,
-        tierMultiplier: 1.35
+        tierMultiplier: 1
       }
     ];
   }
@@ -782,7 +618,9 @@ function buildOptionSeeds(activity: ActivitySeed): ActivityOptionSeed[] {
     {
       title: "Standard experience",
       slug: "standard-experience",
-      availabilityMode: AvailabilityMode.SCHEDULED_SESSIONS,
+      availabilityMode: AvailabilityMode.ALWAYS_AVAILABLE,
+      availableDays: ["MONDAY", "TUESDAY", "WEDNESDAY", "THURSDAY", "FRIDAY", "SATURDAY", "SUNDAY"],
+      dailyCapacity: 12,
       isDefault: true,
       sortOrder: 0
     }
@@ -791,11 +629,13 @@ function buildOptionSeeds(activity: ActivitySeed): ActivityOptionSeed[] {
 
 function buildPricingTiers(multiplier = 1) {
   const tiers = [
-    { minTravelers: 1, maxTravelers: 1, adultPriceCents: 8000, childPriceCents: 5840 },
-    { minTravelers: 2, maxTravelers: 2, adultPriceCents: 6000, childPriceCents: 4380 },
-    { minTravelers: 3, maxTravelers: 3, adultPriceCents: 5200, childPriceCents: 3796 },
-    { minTravelers: 4, maxTravelers: 4, adultPriceCents: 4800, childPriceCents: 3504 },
-    { minTravelers: 5, maxTravelers: 12, adultPriceCents: 4200, childPriceCents: 3066 }
+    { minTravelers: 1, maxTravelers: 1, adultPriceCents: 16221, childPriceCents: 11841 },
+    { minTravelers: 2, maxTravelers: 2, adultPriceCents: 10080, childPriceCents: 7358 },
+    { minTravelers: 3, maxTravelers: 3, adultPriceCents: 10080, childPriceCents: 7358 },
+    { minTravelers: 4, maxTravelers: 4, adultPriceCents: 9960, childPriceCents: 7271 },
+    { minTravelers: 5, maxTravelers: 6, adultPriceCents: 9720, childPriceCents: 7096 },
+    { minTravelers: 7, maxTravelers: 9, adultPriceCents: 9480, childPriceCents: 6920 },
+    { minTravelers: 10, maxTravelers: 12, adultPriceCents: 9240, childPriceCents: 6745 }
   ];
 
   return tiers.map((tier) => ({

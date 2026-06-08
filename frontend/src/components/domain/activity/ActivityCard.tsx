@@ -1,5 +1,6 @@
 "use client";
 
+import Link from "next/link";
 import { Heart, Star } from "lucide-react";
 import type { CurrencyCode, ID } from "../../../types/common";
 import { formatMoney } from "../../../lib/money";
@@ -39,7 +40,7 @@ export function ActivityCard({
   const { currency: displayCurrency } = useCurrency();
 
   return (
-    <a
+    <Link
       className="group block overflow-hidden rounded-travel-lg border border-travel-border bg-white shadow-sm transition duration-300 hover:-translate-y-0.5 hover:border-travel-primary/20 hover:shadow-[0_18px_36px_rgba(26,26,26,0.10)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-travel-primary/30 focus-visible:ring-offset-2"
       href={href}
     >
@@ -90,6 +91,6 @@ export function ActivityCard({
           </p>
         </div>
       </div>
-    </a>
+    </Link>
   );
 }

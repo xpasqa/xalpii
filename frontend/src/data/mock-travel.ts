@@ -48,6 +48,7 @@ export type TravelActivity = {
   city: string;
   country: string;
   location: string;
+  destinationBreadcrumb?: string;
   imageUrl: string;
   gallery: string[];
   duration: string;
