@@ -1,12 +1,15 @@
 import { IsEnum, IsOptional, IsString } from "class-validator";
 import { ActivityStatus } from "@prisma/client";
 import {
+  CreatePartnerActivityOptionDto,
   CreatePartnerActivityAvailabilityDto,
   CreatePartnerActivityMediaDto,
+  UpdatePartnerActivityOptionDto,
   UpdatePartnerActivityAvailabilityDto,
   UpdatePartnerActivityDto,
   UpdatePartnerActivityMediaDto,
-  UpsertPartnerActivityPricingDto
+  UpsertPartnerActivityPricingDto,
+  UpsertPartnerActivityOptionPricingDto
 } from "../../partner/dto/partner-activity.dto";
 
 export class AdminActivityQueryDto {
@@ -51,3 +54,9 @@ export class UpdateAdminActivityAvailabilityDto extends UpdatePartnerActivityAva
 export class CreateAdminActivityMediaDto extends CreatePartnerActivityMediaDto {}
 
 export class UpdateAdminActivityMediaDto extends UpdatePartnerActivityMediaDto {}
+
+export class CreateAdminActivityOptionDto extends CreatePartnerActivityOptionDto {}
+
+export class UpdateAdminActivityOptionDto extends UpdatePartnerActivityOptionDto {}
+
+export class UpsertAdminActivityOptionPricingDto extends UpsertPartnerActivityOptionPricingDto {}

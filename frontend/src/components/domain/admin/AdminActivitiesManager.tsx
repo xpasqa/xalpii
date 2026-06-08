@@ -9,6 +9,7 @@ import {
   CheckCircle2,
   Eye,
   Pencil,
+  Plus,
   Send,
   XCircle
 } from "lucide-react";
@@ -17,12 +18,18 @@ import {
   archiveAdminActivity,
   createAdminActivityAvailability,
   createAdminActivityMedia,
+  createAdminActivityOption,
+  createAdminActivityOptionAvailability,
+  deactivateAdminActivityOption,
+  deactivateAdminActivityOptionAvailability,
   getAdminActivities,
   getAdminActivity,
   publishAdminActivity,
   rejectAdminActivity,
   requestRevisionAdminActivity,
   updateAdminActivity,
+  updateAdminActivityOption,
+  upsertAdminActivityOptionPricing,
   upsertAdminActivityPricing
 } from "../../../lib/admin-activities";
 import type { AdminActivity } from "../../../lib/admin-activities";
@@ -30,9 +37,12 @@ import { getAdminCategories, getAdminCities } from "../../../lib/admin";
 import { requestPresignedUpload, uploadFileToPresignedUrl } from "../../../lib/files";
 import type {
   ActivityStatus,
+  AvailabilityMode,
   LookupCategory,
   LookupCity,
-  PartnerActivityInput
+  PartnerActivityInput,
+  PartnerActivityOption,
+  PartnerActivityOptionInput
 } from "../../../lib/partner-activities";
 import { formatDate } from "../../../lib/dates";
 import {
@@ -110,6 +120,37 @@ type ItineraryModal = {
 type ReviewActionModal = {
   action: "revision" | "reject";
   reason: string;
+} | null;
+
+type PricingTierForm = {
+  index?: number;
+  minTravelers: string;
+  maxTravelers: string;
+  adultPrice: string;
+  childPrice: string;
+  childAllowed: boolean;
+  isActive: boolean;
+};
+
+type OptionModalState = {
+  id?: string;
+  title: string;
+  slug: string;
+  description: string;
+  durationLabel: string;
+  meetingPoint: string;
+  availabilityMode: AvailabilityMode;
+  availableDays: string[];
+  dailyCapacity: string;
+  isActive: boolean;
+  sortOrder: string;
+} | null;
+
+type AvailabilityModalState = {
+  startDateTime: string;
+  endDateTime: string;
+  capacity: string;
+  isActive: boolean;
 } | null;
 
 const emptyItineraryStop: ItineraryStop = {
@@ -287,6 +328,9 @@ export function AdminActivityReviewManager({ activityId }: { activityId: string 
   const [textItemModal, setTextItemModal] = useState<TextItemModal>(null);
   const [itineraryModal, setItineraryModal] = useState<ItineraryModal>(null);
   const [reviewActionModal, setReviewActionModal] = useState<ReviewActionModal>(null);
+  const [optionModal, setOptionModal] = useState<OptionModalState>(null);
+  const [tierModal, setTierModal] = useState<(PricingTierForm & { optionId: string }) | null>(null);
+  const [sessionModal, setSessionModal] = useState<(NonNullable<AvailabilityModalState> & { optionId: string }) | null>(null);
 
   async function loadActivity() {
     setIsLoading(true);
@@ -582,8 +626,57 @@ export function AdminActivityReviewManager({ activityId }: { activityId: string 
                 )
               }
             />
-            <AdminPricingCard activity={activity} onUpdated={loadActivity} />
-            <AdminAvailabilityCard activity={activity} onUpdated={loadActivity} />
+            <AdminExperienceOptionsSection
+              activity={activity}
+              disabled={isMutating}
+              onAddOption={() =>
+                setOptionModal({
+                  availabilityMode: "SCHEDULED_SESSIONS",
+                  availableDays: ["MONDAY", "TUESDAY", "WEDNESDAY", "THURSDAY", "FRIDAY", "SATURDAY", "SUNDAY"],
+                  dailyCapacity: "12",
+                  description: "",
+                  durationLabel: "",
+                  isActive: true,
+                  meetingPoint: "",
+                  slug: "",
+                  sortOrder: String((activity.options?.length ?? 0) + 1),
+                  title: ""
+                })
+              }
+              onEditOption={(option) =>
+                setOptionModal({
+                  availabilityMode: option.availabilityMode,
+                  availableDays: option.availableDays ?? [],
+                  dailyCapacity: option.dailyCapacity == null ? "" : String(option.dailyCapacity),
+                  description: option.description ?? "",
+                  durationLabel: option.durationLabel ?? "",
+                  id: option.id,
+                  isActive: option.isActive,
+                  meetingPoint: option.meetingPoint ?? "",
+                  slug: option.slug,
+                  sortOrder: String(option.sortOrder ?? 0),
+                  title: option.title
+                })
+              }
+              onOpenAvailability={(optionId) =>
+                setSessionModal({ capacity: "12", endDateTime: "", isActive: true, optionId, startDateTime: "" })
+              }
+              onOpenPricing={(optionId, tier, index) =>
+                setTierModal({
+                  adultPrice: usdMinorToInput(tier.adultPriceCents),
+                  childAllowed: tier.childPriceCents != null || tier.childDiscountPercent != null,
+                  childPrice: tier.childPriceCents == null ? "" : usdMinorToInput(tier.childPriceCents),
+                  index,
+                  isActive: tier.isActive,
+                  maxTravelers: String(tier.maxTravelers),
+                  minTravelers: String(tier.minTravelers),
+                  optionId
+                })
+              }
+              onUpdated={loadActivity}
+            />
+            {!(activity.options?.length ?? 0) ? <AdminPricingCard activity={activity} onUpdated={loadActivity} /> : null}
+            {!(activity.options?.length ?? 0) ? <AdminAvailabilityCard activity={activity} onUpdated={loadActivity} /> : null}
             <AdminMediaCard activity={activity} onUpdated={loadActivity} />
           </div>
 
@@ -844,6 +937,91 @@ export function AdminActivityReviewManager({ activityId }: { activityId: string 
         onChange={setReviewActionModal}
         onClose={() => setReviewActionModal(null)}
         onSubmit={(modal) => void mutate(modal.action, modal.reason)}
+      />
+      <AdminOptionDialog
+        modal={optionModal}
+        onClose={() => setOptionModal(null)}
+        onSave={async (modal) => {
+          if (!activity) return;
+          const payload: PartnerActivityOptionInput = {
+            availabilityMode: modal.availabilityMode,
+            availableDays: modal.availabilityMode === "ALWAYS_AVAILABLE" ? modal.availableDays : undefined,
+            dailyCapacity:
+              modal.availabilityMode === "ALWAYS_AVAILABLE" && modal.dailyCapacity
+                ? Number(modal.dailyCapacity)
+                : undefined,
+            description: modal.description,
+            durationLabel: modal.durationLabel,
+            isActive: modal.isActive,
+            meetingPoint: modal.meetingPoint,
+            slug: modal.slug || undefined,
+            sortOrder: Number(modal.sortOrder || 0),
+            title: modal.title
+          };
+          if (modal.id) {
+            await updateAdminActivityOption(activity.id, modal.id, payload);
+          } else {
+            await createAdminActivityOption(activity.id, payload);
+          }
+          setOptionModal(null);
+          await loadActivity();
+        }}
+      />
+      <AdminOptionTierDialog
+        modal={tierModal}
+        onClose={() => setTierModal(null)}
+        onSave={async (modal) => {
+          if (!activity) return;
+          const option = (activity.options ?? []).find((item) => item.id === modal.optionId);
+          if (!option) return;
+          const adultPriceCents = parseUsdInputToMinor(modal.adultPrice);
+          const childPriceCents = modal.childAllowed
+            ? modal.childPrice
+              ? parseUsdInputToMinor(modal.childPrice)
+              : Math.round(adultPriceCents * 0.73)
+            : null;
+          const tier = {
+            adultPriceCents,
+            childAllowed: modal.childAllowed,
+            childDiscountPercent: 27,
+            childPriceCents: childPriceCents ?? undefined,
+            isActive: modal.isActive,
+            maxTravelers: Number(modal.maxTravelers),
+            minTravelers: Number(modal.minTravelers)
+          };
+          const currentTiers = option.pricingTiers.map((item) => ({
+            adultPriceCents: item.adultPriceCents,
+            childAllowed: item.childPriceCents != null || item.childDiscountPercent != null,
+            childDiscountPercent: Number(item.childDiscountPercent ?? 27),
+            childPriceCents: item.childPriceCents ?? undefined,
+            isActive: item.isActive,
+            maxTravelers: item.maxTravelers,
+            minTravelers: item.minTravelers
+          }));
+          const tiers = modal.index === undefined ? [...currentTiers, tier] : replaceAt(currentTiers, modal.index, tier);
+          await upsertAdminActivityOptionPricing(activity.id, option.id, {
+            currency: "USD",
+            priceType: "per_person",
+            tiers
+          });
+          setTierModal(null);
+          await loadActivity();
+        }}
+      />
+      <AdminOptionAvailabilityDialog
+        modal={sessionModal}
+        onClose={() => setSessionModal(null)}
+        onSave={async (modal) => {
+          if (!activity) return;
+          await createAdminActivityOptionAvailability(activity.id, modal.optionId, {
+            capacity: modal.capacity ? Number(modal.capacity) : undefined,
+            endDateTime: modal.endDateTime || undefined,
+            isActive: modal.isActive,
+            startDateTime: modal.startDateTime
+          });
+          setSessionModal(null);
+          await loadActivity();
+        }}
       />
     </div>
   );
@@ -1346,6 +1524,396 @@ function DialogActions({
         {submitLabel}
       </ButtonCTA>
     </div>
+  );
+}
+
+const weekdayOptions = [
+  "MONDAY",
+  "TUESDAY",
+  "WEDNESDAY",
+  "THURSDAY",
+  "FRIDAY",
+  "SATURDAY",
+  "SUNDAY"
+];
+
+function slugifyForInput(value: string) {
+  return value
+    .toLowerCase()
+    .trim()
+    .replace(/[^a-z0-9]+/g, "-")
+    .replace(/^-+|-+$/g, "");
+}
+
+function AdminExperienceOptionsSection({
+  activity,
+  disabled,
+  onAddOption,
+  onEditOption,
+  onOpenAvailability,
+  onOpenPricing,
+  onUpdated
+}: {
+  activity: AdminActivity;
+  disabled: boolean;
+  onAddOption: () => void;
+  onEditOption: (option: PartnerActivityOption) => void;
+  onOpenAvailability: (optionId: string) => void;
+  onOpenPricing: (
+    optionId: string,
+    tier: Pick<
+      PartnerActivityOption["pricingTiers"][number],
+      "adultPriceCents" | "childDiscountPercent" | "childPriceCents" | "isActive" | "maxTravelers" | "minTravelers"
+    >,
+    index: number | undefined
+  ) => void;
+  onUpdated: () => Promise<void>;
+}) {
+  const options = activity.options ?? [];
+  const [error, setError] = useState<string | null>(null);
+
+  return (
+    <Card>
+      <CardHeader className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+        <div>
+          <CardTitle>Experience options</CardTitle>
+          <CardDescription>
+            Admin edits the same package options, sessions, and tier pricing that partners configure.
+          </CardDescription>
+        </div>
+        <ButtonCTA disabled={disabled} leftIcon={<Plus className="size-4" />} onClick={onAddOption} size="sm" type="button" variant="outline">
+          Add option
+        </ButtonCTA>
+      </CardHeader>
+      <CardContent className="grid gap-4">
+        {error ? <p className="text-sm font-medium text-red-700">{error}</p> : null}
+        {options.length ? (
+          options.map((option) => (
+            <div className="rounded-travel-lg border border-[#2B2B2B]/15 p-4" key={option.id}>
+              <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+                <div>
+                  <div className="flex flex-wrap items-center gap-2">
+                    <p className="font-interface text-sm font-semibold text-travel-dark">{option.title}</p>
+                    {option.isDefault ? <Badge variant="info">Default</Badge> : null}
+                    <Badge variant={option.isActive ? "success" : "neutral"}>{option.isActive ? "Active" : "Inactive"}</Badge>
+                  </div>
+                  <p className="mt-1 text-xs text-travel-muted">
+                    {option.availabilityMode === "ALWAYS_AVAILABLE" ? "Available every day" : "Scheduled sessions"}
+                    {option.durationLabel ? ` · ${option.durationLabel}` : ""}
+                  </p>
+                </div>
+                <div className="flex flex-wrap gap-2">
+                  <ButtonCTA disabled={disabled} onClick={() => onEditOption(option)} size="sm" type="button" variant="outline">
+                    Edit option
+                  </ButtonCTA>
+                  <ButtonCTA
+                    disabled={disabled || !option.isActive}
+                    onClick={async () => {
+                      setError(null);
+                      try {
+                        await deactivateAdminActivityOption(activity.id, option.id);
+                        await onUpdated();
+                      } catch (caughtError) {
+                        setError(caughtError instanceof Error ? caughtError.message : "Unable to deactivate option");
+                      }
+                    }}
+                    size="sm"
+                    type="button"
+                    variant="ghost"
+                  >
+                    Deactivate
+                  </ButtonCTA>
+                </div>
+              </div>
+
+              <div className="mt-4 grid gap-4 lg:grid-cols-2">
+                <div>
+                  <div className="mb-2 flex items-center justify-between">
+                    <p className="text-xs font-semibold uppercase tracking-[0.08em] text-travel-muted">Pricing tiers</p>
+                    <ButtonCTA
+                      disabled={disabled}
+                      onClick={() =>
+                        onOpenPricing(option.id, {
+                          adultPriceCents: 0,
+                          childDiscountPercent: 27,
+                          childPriceCents: null,
+                          isActive: true,
+                          maxTravelers: 1,
+                          minTravelers: 1
+                        }, undefined)
+                      }
+                      size="sm"
+                      type="button"
+                      variant="ghost"
+                    >
+                      Add tier
+                    </ButtonCTA>
+                  </div>
+                  {option.pricingTiers.length ? (
+                    <div className="grid gap-2">
+                      {option.pricingTiers.map((tier, index) => (
+                        <div className="flex items-center justify-between rounded-travel-md bg-travel-bg px-3 py-2 text-sm" key={tier.id}>
+                          <span>
+                            {tier.minTravelers === tier.maxTravelers ? tier.minTravelers : `${tier.minTravelers}-${tier.maxTravelers}`} travelers
+                          </span>
+                          <span className="font-semibold text-travel-dark">
+                            {formatBaseUsd(tier.adultPriceCents)} adult · {tier.childPriceCents == null ? "No child" : `${formatBaseUsd(tier.childPriceCents)} child`}
+                          </span>
+                          <button
+                            className="text-xs font-semibold text-travel-primary"
+                            disabled={disabled}
+                            onClick={() => onOpenPricing(option.id, tier, index)}
+                            type="button"
+                          >
+                            Edit
+                          </button>
+                        </div>
+                      ))}
+                    </div>
+                  ) : (
+                    <p className="rounded-travel-md bg-travel-bg px-3 py-3 text-sm text-travel-muted">No option pricing yet.</p>
+                  )}
+                </div>
+
+                <div>
+                  <div className="mb-2 flex items-center justify-between">
+                    <p className="text-xs font-semibold uppercase tracking-[0.08em] text-travel-muted">Availability</p>
+                    {option.availabilityMode === "SCHEDULED_SESSIONS" ? (
+                      <ButtonCTA
+                        disabled={disabled}
+                        onClick={() => onOpenAvailability(option.id)}
+                        size="sm"
+                        type="button"
+                        variant="ghost"
+                      >
+                        Add session
+                      </ButtonCTA>
+                    ) : null}
+                  </div>
+                  {option.availabilityMode === "ALWAYS_AVAILABLE" ? (
+                    <p className="rounded-travel-md bg-travel-bg px-3 py-3 text-sm text-travel-muted">
+                      Days: {(option.availableDays ?? []).join(", ") || "Every day"} · Daily capacity: {option.dailyCapacity ?? "Open"}
+                    </p>
+                  ) : option.availability.length ? (
+                    <div className="grid gap-2">
+                      {option.availability.map((slot) => (
+                        <div className="flex items-center justify-between rounded-travel-md bg-travel-bg px-3 py-2 text-sm" key={slot.id}>
+                          <span>{formatDate(slot.startDateTime, "en-US", { dateStyle: "medium", timeStyle: "short" })}</span>
+                          <ButtonCTA
+                            disabled={disabled || !slot.isActive}
+                            onClick={async () => {
+                              setError(null);
+                              try {
+                                await deactivateAdminActivityOptionAvailability(activity.id, option.id, slot.id);
+                                await onUpdated();
+                              } catch (caughtError) {
+                                setError(caughtError instanceof Error ? caughtError.message : "Unable to deactivate option session");
+                              }
+                            }}
+                            size="sm"
+                            type="button"
+                            variant="ghost"
+                          >
+                            Deactivate
+                          </ButtonCTA>
+                        </div>
+                      ))}
+                    </div>
+                  ) : (
+                    <p className="rounded-travel-md bg-travel-bg px-3 py-3 text-sm text-travel-muted">No scheduled sessions yet.</p>
+                  )}
+                </div>
+              </div>
+            </div>
+          ))
+        ) : (
+          <EmptyState title="No package options" description="Add package options so admin can manage the same commerce setup partners use." />
+        )}
+      </CardContent>
+    </Card>
+  );
+}
+
+function AdminOptionDialog({
+  modal,
+  onClose,
+  onSave
+}: {
+  modal: OptionModalState;
+  onClose: () => void;
+  onSave: (modal: NonNullable<OptionModalState>) => Promise<void>;
+}) {
+  const [value, setValue] = useState<NonNullable<OptionModalState> | null>(modal);
+
+  useEffect(() => {
+    setValue(modal);
+  }, [modal]);
+
+  return (
+    <Dialog description="Package variants can use scheduled sessions or an always-available daily schedule." onClose={onClose} open={Boolean(modal)} title={modal?.id ? "Edit option" : "Add option"}>
+      {value ? (
+        <form className="grid gap-4" onSubmit={(event) => { event.preventDefault(); void onSave(value); }}>
+          <div className="grid gap-4 sm:grid-cols-2">
+            <Field label="Option name" required>
+              <Input
+                onChange={(event) => {
+                  const currentGeneratedSlug = slugifyForInput(value.title);
+                  const nextTitle = event.target.value;
+                  const nextGeneratedSlug = slugifyForInput(nextTitle);
+                  setValue({
+                    ...value,
+                    title: nextTitle,
+                    slug: !value.slug || value.slug === currentGeneratedSlug ? nextGeneratedSlug : value.slug
+                  });
+                }}
+                required
+                value={value.title}
+              />
+            </Field>
+            <Field label="Slug">
+              <Input onChange={(event) => setValue({ ...value, slug: slugifyForInput(event.target.value) })} value={value.slug} />
+            </Field>
+            <Field label="Availability mode" required>
+              <Select onChange={(event) => setValue({ ...value, availabilityMode: event.target.value as AvailabilityMode })} value={value.availabilityMode}>
+                <option value="SCHEDULED_SESSIONS">Scheduled sessions</option>
+                <option value="ALWAYS_AVAILABLE">Available every day</option>
+              </Select>
+            </Field>
+            <Field label="Sort order">
+              <Input min={0} onChange={(event) => setValue({ ...value, sortOrder: event.target.value })} type="number" value={value.sortOrder} />
+            </Field>
+            <Field label="Duration">
+              <Input onChange={(event) => setValue({ ...value, durationLabel: event.target.value })} value={value.durationLabel} />
+            </Field>
+            <Field label="Daily capacity">
+              <Input disabled={value.availabilityMode !== "ALWAYS_AVAILABLE"} min={1} onChange={(event) => setValue({ ...value, dailyCapacity: event.target.value })} type="number" value={value.dailyCapacity} />
+            </Field>
+          </div>
+          <Field label="Description">
+            <Textarea onChange={(event) => setValue({ ...value, description: event.target.value })} rows={3} value={value.description} />
+          </Field>
+          <Field label="Meeting point override">
+            <Input onChange={(event) => setValue({ ...value, meetingPoint: event.target.value })} value={value.meetingPoint} />
+          </Field>
+          {value.availabilityMode === "ALWAYS_AVAILABLE" ? (
+            <div className="grid gap-2">
+              <p className="text-sm font-semibold text-travel-dark">Available days</p>
+              <div className="grid gap-2 sm:grid-cols-2">
+                {weekdayOptions.map((day) => (
+                  <label className="flex items-center gap-2 text-sm text-travel-dark" key={day}>
+                    <input
+                      checked={value.availableDays.includes(day)}
+                      onChange={(event) =>
+                        setValue({
+                          ...value,
+                          availableDays: event.target.checked
+                            ? [...value.availableDays, day]
+                            : value.availableDays.filter((item) => item !== day)
+                        })
+                      }
+                      type="checkbox"
+                    />
+                    {day.charAt(0) + day.slice(1).toLowerCase()}
+                  </label>
+                ))}
+              </div>
+            </div>
+          ) : null}
+          <label className="flex items-center gap-2 text-sm font-medium text-travel-dark">
+            <input checked={value.isActive} onChange={(event) => setValue({ ...value, isActive: event.target.checked })} type="checkbox" />
+            Active option
+          </label>
+          <DialogActions onCancel={onClose} submitLabel="Save option" />
+        </form>
+      ) : null}
+    </Dialog>
+  );
+}
+
+function AdminOptionTierDialog({
+  modal,
+  onClose,
+  onSave
+}: {
+  modal: (PricingTierForm & { optionId: string }) | null;
+  onClose: () => void;
+  onSave: (modal: PricingTierForm & { optionId: string }) => Promise<void>;
+}) {
+  const [value, setValue] = useState<typeof modal>(modal);
+
+  useEffect(() => {
+    setValue(modal);
+  }, [modal]);
+
+  return (
+    <Dialog onClose={onClose} open={Boolean(modal)} title={modal?.index === undefined ? "Add option tier" : "Edit option tier"}>
+      {value ? (
+        <form className="grid gap-4" onSubmit={(event) => { event.preventDefault(); void onSave(value); }}>
+          <div className="grid gap-4 sm:grid-cols-2">
+            <Field label="Min travelers" required>
+              <Input max={14} min={1} onChange={(event) => setValue({ ...value, minTravelers: event.target.value })} required type="number" value={value.minTravelers} />
+            </Field>
+            <Field label="Max travelers" required>
+              <Input max={14} min={1} onChange={(event) => setValue({ ...value, maxTravelers: event.target.value })} required type="number" value={value.maxTravelers} />
+            </Field>
+            <Field label="Adult price (USD)" required>
+              <Input min={0} onChange={(event) => setValue({ ...value, adultPrice: event.target.value })} required step="0.01" type="number" value={value.adultPrice} />
+            </Field>
+            <Field label="Child price (USD)">
+              <Input disabled={!value.childAllowed} min={0} onChange={(event) => setValue({ ...value, childPrice: event.target.value })} step="0.01" type="number" value={value.childPrice} />
+            </Field>
+          </div>
+          <label className="flex items-center gap-2 text-sm font-medium text-travel-dark">
+            <input checked={value.childAllowed} onChange={(event) => setValue({ ...value, childAllowed: event.target.checked, childPrice: event.target.checked ? value.childPrice : "" })} type="checkbox" />
+            Available for child travelers
+          </label>
+          <label className="flex items-center gap-2 text-sm font-medium text-travel-dark">
+            <input checked={value.isActive} onChange={(event) => setValue({ ...value, isActive: event.target.checked })} type="checkbox" />
+            Active tier
+          </label>
+          <DialogActions onCancel={onClose} submitLabel="Save tier" />
+        </form>
+      ) : null}
+    </Dialog>
+  );
+}
+
+function AdminOptionAvailabilityDialog({
+  modal,
+  onClose,
+  onSave
+}: {
+  modal: (NonNullable<AvailabilityModalState> & { optionId: string }) | null;
+  onClose: () => void;
+  onSave: (modal: NonNullable<AvailabilityModalState> & { optionId: string }) => Promise<void>;
+}) {
+  const [value, setValue] = useState<typeof modal>(modal);
+
+  useEffect(() => {
+    setValue(modal);
+  }, [modal]);
+
+  return (
+    <Dialog description="Add a scheduled session for this package option." onClose={onClose} open={Boolean(modal)} title="Add option session">
+      {value ? (
+        <form className="grid gap-4" onSubmit={(event) => { event.preventDefault(); void onSave(value); }}>
+          <Field label="Start date/time" required>
+            <Input onChange={(event) => setValue({ ...value, startDateTime: event.target.value })} required type="datetime-local" value={value.startDateTime} />
+          </Field>
+          <Field label="End date/time">
+            <Input onChange={(event) => setValue({ ...value, endDateTime: event.target.value })} type="datetime-local" value={value.endDateTime} />
+          </Field>
+          <Field label="Capacity">
+            <Input min={1} onChange={(event) => setValue({ ...value, capacity: event.target.value })} type="number" value={value.capacity} />
+          </Field>
+          <label className="flex items-center gap-2 text-sm font-medium text-travel-dark">
+            <input checked={value.isActive} onChange={(event) => setValue({ ...value, isActive: event.target.checked })} type="checkbox" />
+            Active session
+          </label>
+          <DialogActions onCancel={onClose} submitLabel="Add session" />
+        </form>
+      ) : null}
+    </Dialog>
   );
 }
 

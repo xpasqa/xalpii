@@ -10,10 +10,13 @@ import {
   AdminActivityQueryDto,
   CreateAdminActivityAvailabilityDto,
   CreateAdminActivityMediaDto,
+  CreateAdminActivityOptionDto,
   RejectAdminActivityDto,
+  UpdateAdminActivityOptionDto,
   UpdateAdminActivityAvailabilityDto,
   UpdateAdminActivityDto,
   UpdateAdminActivityMediaDto,
+  UpsertAdminActivityOptionPricingDto,
   UpsertAdminActivityPricingDto
 } from "./dto/admin-activity.dto";
 
@@ -60,6 +63,128 @@ export class AdminActivitiesController {
     return {
       success: true,
       data: await this.activities.upsertPricing(id, user.id, dto)
+    };
+  }
+
+  @Get(":id/options")
+  async listOptions(@Param("id") id: string) {
+    return {
+      success: true,
+      data: await this.activities.listOptions(id)
+    };
+  }
+
+  @Post(":id/options")
+  async createOption(
+    @Param("id") id: string,
+    @Body() dto: CreateAdminActivityOptionDto,
+    @CurrentUser() user: AuthenticatedRequestUser
+  ) {
+    return {
+      success: true,
+      data: await this.activities.createOption(id, user.id, dto)
+    };
+  }
+
+  @Get(":id/options/:optionId")
+  async getOption(@Param("id") id: string, @Param("optionId") optionId: string) {
+    return {
+      success: true,
+      data: await this.activities.getOption(id, optionId)
+    };
+  }
+
+  @Patch(":id/options/:optionId")
+  async updateOption(
+    @Param("id") id: string,
+    @Param("optionId") optionId: string,
+    @Body() dto: UpdateAdminActivityOptionDto,
+    @CurrentUser() user: AuthenticatedRequestUser
+  ) {
+    return {
+      success: true,
+      data: await this.activities.updateOption(id, optionId, user.id, dto)
+    };
+  }
+
+  @Delete(":id/options/:optionId")
+  async deactivateOption(
+    @Param("id") id: string,
+    @Param("optionId") optionId: string,
+    @CurrentUser() user: AuthenticatedRequestUser
+  ) {
+    return {
+      success: true,
+      data: await this.activities.deactivateOption(id, optionId, user.id)
+    };
+  }
+
+  @Get(":id/options/:optionId/pricing")
+  async getOptionPricing(@Param("id") id: string, @Param("optionId") optionId: string) {
+    return {
+      success: true,
+      data: await this.activities.getOptionPricing(id, optionId)
+    };
+  }
+
+  @Put(":id/options/:optionId/pricing")
+  async upsertOptionPricing(
+    @Param("id") id: string,
+    @Param("optionId") optionId: string,
+    @Body() dto: UpsertAdminActivityOptionPricingDto,
+    @CurrentUser() user: AuthenticatedRequestUser
+  ) {
+    return {
+      success: true,
+      data: await this.activities.upsertOptionPricing(id, optionId, user.id, dto)
+    };
+  }
+
+  @Get(":id/options/:optionId/availability")
+  async listOptionAvailability(@Param("id") id: string, @Param("optionId") optionId: string) {
+    return {
+      success: true,
+      data: await this.activities.listOptionAvailability(id, optionId)
+    };
+  }
+
+  @Post(":id/options/:optionId/availability")
+  async createOptionAvailability(
+    @Param("id") id: string,
+    @Param("optionId") optionId: string,
+    @Body() dto: CreateAdminActivityAvailabilityDto,
+    @CurrentUser() user: AuthenticatedRequestUser
+  ) {
+    return {
+      success: true,
+      data: await this.activities.createOptionAvailability(id, optionId, user.id, dto)
+    };
+  }
+
+  @Patch(":id/options/:optionId/availability/:availabilityId")
+  async updateOptionAvailability(
+    @Param("id") id: string,
+    @Param("optionId") optionId: string,
+    @Param("availabilityId") availabilityId: string,
+    @Body() dto: UpdateAdminActivityAvailabilityDto,
+    @CurrentUser() user: AuthenticatedRequestUser
+  ) {
+    return {
+      success: true,
+      data: await this.activities.updateOptionAvailability(id, optionId, availabilityId, user.id, dto)
+    };
+  }
+
+  @Delete(":id/options/:optionId/availability/:availabilityId")
+  async deactivateOptionAvailability(
+    @Param("id") id: string,
+    @Param("optionId") optionId: string,
+    @Param("availabilityId") availabilityId: string,
+    @CurrentUser() user: AuthenticatedRequestUser
+  ) {
+    return {
+      success: true,
+      data: await this.activities.deactivateOptionAvailability(id, optionId, availabilityId, user.id)
     };
   }
 

@@ -9,6 +9,7 @@ import type {
   PartnerAvailabilityInput,
   PartnerActivityAvailability,
   PartnerActivityMedia,
+  PartnerActivityOptionInput,
   PartnerActivityPricing,
   PartnerActivityOption,
   PartnerMediaInput,
@@ -127,6 +128,80 @@ export async function createAdminActivityMedia(id: string, input: PartnerMediaIn
       body: JSON.stringify(input),
       method: "POST",
       path: `/admin/activities/${id}/media`
+    })
+  );
+}
+
+export async function createAdminActivityOption(id: string, input: PartnerActivityOptionInput) {
+  return requireData(
+    await authenticatedFetch<PartnerActivityOption>({
+      body: JSON.stringify(input),
+      method: "POST",
+      path: `/admin/activities/${id}/options`
+    })
+  );
+}
+
+export async function updateAdminActivityOption(
+  id: string,
+  optionId: string,
+  input: Partial<PartnerActivityOptionInput>
+) {
+  return requireData(
+    await authenticatedFetch<PartnerActivityOption>({
+      body: JSON.stringify(input),
+      method: "PATCH",
+      path: `/admin/activities/${id}/options/${optionId}`
+    })
+  );
+}
+
+export async function deactivateAdminActivityOption(id: string, optionId: string) {
+  return requireData(
+    await authenticatedFetch<PartnerActivityOption>({
+      method: "DELETE",
+      path: `/admin/activities/${id}/options/${optionId}`
+    })
+  );
+}
+
+export async function upsertAdminActivityOptionPricing(
+  id: string,
+  optionId: string,
+  input: PartnerPricingInput
+) {
+  return requireData(
+    await authenticatedFetch<{ currency: string; pricingTiers: AdminActivity["pricingTiers"] }>({
+      body: JSON.stringify(input),
+      method: "PUT",
+      path: `/admin/activities/${id}/options/${optionId}/pricing`
+    })
+  );
+}
+
+export async function createAdminActivityOptionAvailability(
+  id: string,
+  optionId: string,
+  input: PartnerAvailabilityInput
+) {
+  return requireData(
+    await authenticatedFetch<PartnerActivityAvailability>({
+      body: JSON.stringify(input),
+      method: "POST",
+      path: `/admin/activities/${id}/options/${optionId}/availability`
+    })
+  );
+}
+
+export async function deactivateAdminActivityOptionAvailability(
+  id: string,
+  optionId: string,
+  availabilityId: string
+) {
+  return requireData(
+    await authenticatedFetch<PartnerActivityAvailability>({
+      method: "DELETE",
+      path: `/admin/activities/${id}/options/${optionId}/availability/${availabilityId}`
     })
   );
 }

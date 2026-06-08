@@ -9,6 +9,7 @@ import {
   ArrowUp,
   CheckCircle2,
   ImagePlus,
+  Info,
   ListPlus,
   Pencil,
   Plus,
@@ -692,6 +693,7 @@ export function PartnerActivityEditManager({ activityId }: { activityId: string 
         : { canSubmit: false, items: [] },
     [activity, highlights, included, itinerary, notIncluded, policies]
   );
+  const hasOptionBasedAvailability = (activity?.options?.length ?? 0) > 0;
 
   if (isLoading) {
     return <LoadingState label="Loading activity builder" />;
@@ -777,135 +779,155 @@ export function PartnerActivityEditManager({ activityId }: { activityId: string 
 
       <div className="grid gap-5 xl:grid-cols-[minmax(0,1fr)_360px]">
         <div className="grid gap-5">
-          <BasicDetailsSection
-            basic={basic}
-            disabled={!isEditable || isSaving}
-            lookups={lookups}
-            onChange={setBasic}
-            onSubmit={saveBasic}
-          />
-          <ListSection
-            disabled={!isEditable || isSaving}
-            items={highlights}
-            onAdd={() => setItemModal({ kind: "highlight", value: "" })}
-            onDelete={(index) => {
-              const next = removeAt(highlights, index);
-              void savePartial({ highlights: next }, "Highlights saved.");
-            }}
-            onEdit={(index) => setItemModal({ index, kind: "highlight", value: highlights[index] ?? "" })}
-            title="Highlights"
-            description="Short selling points travelers will scan before booking."
-            emptyLabel="No highlights added yet."
-          />
-          <IncludesSection
-            disabled={!isEditable || isSaving}
-            included={included}
-            notIncluded={notIncluded}
-            onAddIncluded={() => setItemModal({ kind: "included", value: "" })}
-            onAddNotIncluded={() => setItemModal({ kind: "notIncluded", value: "" })}
-            onDeleteIncluded={(index) => {
-              const next = removeAt(included, index);
-              void savePartial({ included: next }, "Included items saved.");
-            }}
-            onDeleteNotIncluded={(index) => {
-              const next = removeAt(notIncluded, index);
-              void savePartial({ notIncluded: next }, "Not included items saved.");
-            }}
-            onEditIncluded={(index) => setItemModal({ index, kind: "included", value: included[index] ?? "" })}
-            onEditNotIncluded={(index) =>
-              setItemModal({ index, kind: "notIncluded", value: notIncluded[index] ?? "" })
-            }
-          />
-          <ItinerarySection
-            disabled={!isEditable || isSaving}
-            items={itinerary}
-            onAdd={() => setItineraryModal({ value: emptyItineraryStop })}
-            onDelete={(index) => {
-              const next = removeAt(itinerary, index);
-              void savePartial({ itinerary: next }, "Itinerary saved.");
-            }}
-            onEdit={(index) =>
-              setItineraryModal({ index, value: itinerary[index] ?? emptyItineraryStop })
-            }
-            onMove={(index, direction) => {
-              const next = moveItem(itinerary, index, direction);
-              void savePartial({ itinerary: next }, "Itinerary saved.");
-            }}
-          />
-          <PoliciesSection
-            disabled={!isEditable || isSaving}
-            onChange={setPolicies}
-            onSubmit={savePolicies}
-            policies={policies}
-          />
-          <ExperienceOptionsSection
-            activity={activity}
-            disabled={!isEditable || isSaving}
-            onAddOption={() =>
-              setOptionModal({
-                availabilityMode: "SCHEDULED_SESSIONS",
-                availableDays: ["MONDAY", "TUESDAY", "WEDNESDAY", "THURSDAY", "FRIDAY", "SATURDAY", "SUNDAY"],
-                dailyCapacity: "12",
-                description: "",
-                durationLabel: "",
-                isActive: true,
-                meetingPoint: "",
-                slug: "",
-                sortOrder: String((activity.options?.length ?? 0) + 1),
-                title: ""
-              })
-            }
-            onEditOption={(option) =>
-              setOptionModal({
-                availabilityMode: option.availabilityMode,
-                availableDays: option.availableDays ?? [],
-                dailyCapacity: option.dailyCapacity == null ? "" : String(option.dailyCapacity),
-                description: option.description ?? "",
-                durationLabel: option.durationLabel ?? "",
-                id: option.id,
-                isActive: option.isActive,
-                meetingPoint: option.meetingPoint ?? "",
-                slug: option.slug,
-                sortOrder: String(option.sortOrder ?? 0),
-                title: option.title
-              })
-            }
-            onUpdated={loadAll}
-          />
-          <PricingSection activity={activity} disabled={!isEditable || isSaving} onUpdated={loadAll} />
-          <AvailabilitySection
-            activity={activity}
-            disabled={!isEditable || isSaving}
-            onAdd={() =>
-              setAvailabilityModal({
-                capacity: "12",
-                endDateTime: "",
-                isActive: true,
-                startDateTime: ""
-              })
-            }
-            onDeactivate={async (availabilityId) => {
-              setError(null);
-              await deactivatePartnerActivityAvailability(activity.id, availabilityId);
-              await loadAll();
-            }}
-          />
-          <MediaSection
-            activity={activity}
-            disabled={!isEditable || isSaving}
-            onAddUrl={() => setMediaUrlModal({ altText: activity.title, isCover: activity.media.length === 0, url: "" })}
-            onDelete={async (mediaId) => {
-              setError(null);
-              await deletePartnerActivityMedia(activity.id, mediaId);
-              await loadAll();
-            }}
-            onUpdated={loadAll}
-          />
+          <SectionAnchor id="basic-details">
+            <BasicDetailsSection
+              basic={basic}
+              disabled={!isEditable || isSaving}
+              lookups={lookups}
+              onChange={setBasic}
+              onSubmit={saveBasic}
+            />
+          </SectionAnchor>
+          <SectionAnchor id="highlights">
+            <ListSection
+              disabled={!isEditable || isSaving}
+              items={highlights}
+              onAdd={() => setItemModal({ kind: "highlight", value: "" })}
+              onDelete={(index) => {
+                const next = removeAt(highlights, index);
+                void savePartial({ highlights: next }, "Highlights saved.");
+              }}
+              onEdit={(index) => setItemModal({ index, kind: "highlight", value: highlights[index] ?? "" })}
+              title="Highlights"
+              description="Short selling points travelers will scan before booking."
+              emptyLabel="No highlights added yet."
+            />
+          </SectionAnchor>
+          <SectionAnchor id="includes">
+            <IncludesSection
+              disabled={!isEditable || isSaving}
+              included={included}
+              notIncluded={notIncluded}
+              onAddIncluded={() => setItemModal({ kind: "included", value: "" })}
+              onAddNotIncluded={() => setItemModal({ kind: "notIncluded", value: "" })}
+              onDeleteIncluded={(index) => {
+                const next = removeAt(included, index);
+                void savePartial({ included: next }, "Included items saved.");
+              }}
+              onDeleteNotIncluded={(index) => {
+                const next = removeAt(notIncluded, index);
+                void savePartial({ notIncluded: next }, "Not included items saved.");
+              }}
+              onEditIncluded={(index) => setItemModal({ index, kind: "included", value: included[index] ?? "" })}
+              onEditNotIncluded={(index) =>
+                setItemModal({ index, kind: "notIncluded", value: notIncluded[index] ?? "" })
+              }
+            />
+          </SectionAnchor>
+          <SectionAnchor id="itinerary">
+            <ItinerarySection
+              disabled={!isEditable || isSaving}
+              items={itinerary}
+              onAdd={() => setItineraryModal({ value: emptyItineraryStop })}
+              onDelete={(index) => {
+                const next = removeAt(itinerary, index);
+                void savePartial({ itinerary: next }, "Itinerary saved.");
+              }}
+              onEdit={(index) =>
+                setItineraryModal({ index, value: itinerary[index] ?? emptyItineraryStop })
+              }
+              onMove={(index, direction) => {
+                const next = moveItem(itinerary, index, direction);
+                void savePartial({ itinerary: next }, "Itinerary saved.");
+              }}
+            />
+          </SectionAnchor>
+          <SectionAnchor id="policies">
+            <PoliciesSection
+              disabled={!isEditable || isSaving}
+              onChange={setPolicies}
+              onSubmit={savePolicies}
+              policies={policies}
+            />
+          </SectionAnchor>
+          <SectionAnchor id="options">
+            <ExperienceOptionsSection
+              activity={activity}
+              disabled={!isEditable || isSaving}
+              onAddOption={() =>
+                setOptionModal({
+                  availabilityMode: "SCHEDULED_SESSIONS",
+                  availableDays: ["MONDAY", "TUESDAY", "WEDNESDAY", "THURSDAY", "FRIDAY", "SATURDAY", "SUNDAY"],
+                  dailyCapacity: "12",
+                  description: "",
+                  durationLabel: "",
+                  isActive: true,
+                  meetingPoint: "",
+                  slug: "",
+                  sortOrder: String((activity.options?.length ?? 0) + 1),
+                  title: ""
+                })
+              }
+              onEditOption={(option) =>
+                setOptionModal({
+                  availabilityMode: option.availabilityMode,
+                  availableDays: option.availableDays ?? [],
+                  dailyCapacity: option.dailyCapacity == null ? "" : String(option.dailyCapacity),
+                  description: option.description ?? "",
+                  durationLabel: option.durationLabel ?? "",
+                  id: option.id,
+                  isActive: option.isActive,
+                  meetingPoint: option.meetingPoint ?? "",
+                  slug: option.slug,
+                  sortOrder: String(option.sortOrder ?? 0),
+                  title: option.title
+                })
+              }
+              onUpdated={loadAll}
+            />
+          </SectionAnchor>
+          <SectionAnchor id="pricing">
+            <PricingSection activity={activity} disabled={!isEditable || isSaving} onUpdated={loadAll} />
+          </SectionAnchor>
+          {!hasOptionBasedAvailability ? (
+            <SectionAnchor id="availability">
+              <AvailabilitySection
+                activity={activity}
+                disabled={!isEditable || isSaving}
+                onAdd={() =>
+                  setAvailabilityModal({
+                    capacity: "12",
+                    endDateTime: "",
+                    isActive: true,
+                    startDateTime: ""
+                  })
+                }
+                onDeactivate={async (availabilityId) => {
+                  setError(null);
+                  await deactivatePartnerActivityAvailability(activity.id, availabilityId);
+                  await loadAll();
+                }}
+              />
+            </SectionAnchor>
+          ) : null}
+          <SectionAnchor id="media">
+            <MediaSection
+              activity={activity}
+              disabled={!isEditable || isSaving}
+              onAddUrl={() => setMediaUrlModal({ altText: activity.title, isCover: activity.media.length === 0, url: "" })}
+              onDelete={async (mediaId) => {
+                setError(null);
+                await deletePartnerActivityMedia(activity.id, mediaId);
+                await loadAll();
+              }}
+              onUpdated={loadAll}
+            />
+          </SectionAnchor>
         </div>
 
         <aside className="xl:sticky xl:top-24 xl:self-start">
           <ReadinessPanel
-            activity={activity}
+            activityStatusLabel={formatStatus(activity.status)}
             disabled={!isEditable || isSaving}
             onSubmit={submitForReview}
             readiness={readiness}
@@ -1184,6 +1206,15 @@ export function PartnerActivityRevisionManager({
   }
 
   const disabled = isSaving || isReadOnlyRevision(revision.status);
+  const revisionReadiness = getRevisionReadiness({
+    basic,
+    policies,
+    highlights,
+    included,
+    itinerary,
+    notIncluded,
+    snapshot: revision.snapshot
+  });
 
   return (
     <div className="grid gap-5">
@@ -1236,89 +1267,94 @@ export function PartnerActivityRevisionManager({
 
       <div className="grid gap-5 xl:grid-cols-[minmax(0,1fr)_360px]">
         <div className="grid gap-5">
-          <BasicDetailsSection
-            basic={basic}
-            disabled={disabled}
-            lookups={lookups}
-            onChange={setBasic}
-            onSubmit={saveBasic}
-          />
-          <ListSection
-            description="Short selling points travelers will scan before booking."
-            disabled={disabled}
-            emptyLabel="No highlights added yet."
-            items={highlights}
-            onAdd={() => setItemModal({ kind: "highlight", value: "" })}
-            onDelete={(index) => {
-              const next = removeAt(highlights, index);
-              void saveSnapshot(snapshotWithActivity({ highlights: next }), "Revision highlights saved.");
-            }}
-            onEdit={(index) => setItemModal({ index, kind: "highlight", value: highlights[index] ?? "" })}
-            title="Highlights"
-          />
-          <IncludesSection
-            disabled={disabled}
-            included={included}
-            notIncluded={notIncluded}
-            onAddIncluded={() => setItemModal({ kind: "included", value: "" })}
-            onAddNotIncluded={() => setItemModal({ kind: "notIncluded", value: "" })}
-            onDeleteIncluded={(index) => {
-              const next = removeAt(included, index);
-              void saveSnapshot(snapshotWithActivity({ included: next }), "Revision included items saved.");
-            }}
-            onDeleteNotIncluded={(index) => {
-              const next = removeAt(notIncluded, index);
-              void saveSnapshot(snapshotWithActivity({ notIncluded: next }), "Revision not included items saved.");
-            }}
-            onEditIncluded={(index) => setItemModal({ index, kind: "included", value: included[index] ?? "" })}
-            onEditNotIncluded={(index) =>
-              setItemModal({ index, kind: "notIncluded", value: notIncluded[index] ?? "" })
-            }
-          />
-          <ItinerarySection
-            disabled={disabled}
-            items={itinerary}
-            onAdd={() => setItineraryModal({ value: emptyItineraryStop })}
-            onDelete={(index) => {
-              const next = removeAt(itinerary, index);
-              void saveSnapshot(snapshotWithActivity({ itinerary: next }), "Revision itinerary saved.");
-            }}
-            onEdit={(index) => setItineraryModal({ index, value: itinerary[index] ?? emptyItineraryStop })}
-            onMove={(index, direction) => {
-              const next = moveItem(itinerary, index, direction);
-              void saveSnapshot(snapshotWithActivity({ itinerary: next }), "Revision itinerary saved.");
-            }}
-          />
-          <PoliciesSection
-            disabled={disabled}
-            onChange={setPolicies}
-            onSubmit={savePolicies}
-            policies={policies}
-          />
-          <RevisionOptionsSnapshotSection
-            disabled={disabled}
-            onSave={(options) =>
-              saveSnapshot({ ...revision.snapshot, options }, "Revision package options saved.")
-            }
-            options={revision.snapshot.options ?? []}
-          />
+          <SectionAnchor id="basic-details">
+            <BasicDetailsSection
+              basic={basic}
+              disabled={disabled}
+              lookups={lookups}
+              onChange={setBasic}
+              onSubmit={saveBasic}
+            />
+          </SectionAnchor>
+          <SectionAnchor id="highlights">
+            <ListSection
+              description="Short selling points travelers will scan before booking."
+              disabled={disabled}
+              emptyLabel="No highlights added yet."
+              items={highlights}
+              onAdd={() => setItemModal({ kind: "highlight", value: "" })}
+              onDelete={(index) => {
+                const next = removeAt(highlights, index);
+                void saveSnapshot(snapshotWithActivity({ highlights: next }), "Revision highlights saved.");
+              }}
+              onEdit={(index) => setItemModal({ index, kind: "highlight", value: highlights[index] ?? "" })}
+              title="Highlights"
+            />
+          </SectionAnchor>
+          <SectionAnchor id="includes">
+            <IncludesSection
+              disabled={disabled}
+              included={included}
+              notIncluded={notIncluded}
+              onAddIncluded={() => setItemModal({ kind: "included", value: "" })}
+              onAddNotIncluded={() => setItemModal({ kind: "notIncluded", value: "" })}
+              onDeleteIncluded={(index) => {
+                const next = removeAt(included, index);
+                void saveSnapshot(snapshotWithActivity({ included: next }), "Revision included items saved.");
+              }}
+              onDeleteNotIncluded={(index) => {
+                const next = removeAt(notIncluded, index);
+                void saveSnapshot(snapshotWithActivity({ notIncluded: next }), "Revision not included items saved.");
+              }}
+              onEditIncluded={(index) => setItemModal({ index, kind: "included", value: included[index] ?? "" })}
+              onEditNotIncluded={(index) =>
+                setItemModal({ index, kind: "notIncluded", value: notIncluded[index] ?? "" })
+              }
+            />
+          </SectionAnchor>
+          <SectionAnchor id="itinerary">
+            <ItinerarySection
+              disabled={disabled}
+              items={itinerary}
+              onAdd={() => setItineraryModal({ value: emptyItineraryStop })}
+              onDelete={(index) => {
+                const next = removeAt(itinerary, index);
+                void saveSnapshot(snapshotWithActivity({ itinerary: next }), "Revision itinerary saved.");
+              }}
+              onEdit={(index) => setItineraryModal({ index, value: itinerary[index] ?? emptyItineraryStop })}
+              onMove={(index, direction) => {
+                const next = moveItem(itinerary, index, direction);
+                void saveSnapshot(snapshotWithActivity({ itinerary: next }), "Revision itinerary saved.");
+              }}
+            />
+          </SectionAnchor>
+          <SectionAnchor id="policies">
+            <PoliciesSection
+              disabled={disabled}
+              onChange={setPolicies}
+              onSubmit={savePolicies}
+              policies={policies}
+            />
+          </SectionAnchor>
+          <SectionAnchor id="options">
+            <RevisionOptionsSnapshotSection
+              disabled={disabled}
+              onSave={(options) =>
+                saveSnapshot({ ...revision.snapshot, options }, "Revision package options saved.")
+              }
+              options={revision.snapshot.options ?? []}
+            />
+          </SectionAnchor>
         </div>
         <aside className="xl:sticky xl:top-24 xl:self-start">
-          <Card>
-            <CardHeader>
-              <CardTitle>Revision status</CardTitle>
-              <CardDescription>Draft changes are isolated from the public listing.</CardDescription>
-            </CardHeader>
-            <CardContent className="grid gap-3 text-sm">
-              <StatusLine label="Current state" value={revisionLabel(revision.status)} />
-              <StatusLine label="Created" value={formatDate(revision.createdAt)} />
-              <StatusLine label="Updated" value={formatDate(revision.updatedAt)} />
-              {revision.submittedAt ? <StatusLine label="Submitted" value={formatDate(revision.submittedAt)} /> : null}
-              <div className="rounded-travel-md bg-[#FBEAE8] p-3 text-xs leading-5 text-travel-primary">
-                Public API and bookings use the live activity until admin approves and applies this revision.
-              </div>
-            </CardContent>
-          </Card>
+          <ReadinessPanel
+            activityStatusLabel={revisionLabel(revision.status)}
+            disabled={disabled}
+            note="The published listing stays live until admin approval applies this revision."
+            onSubmit={submitRevision}
+            readiness={revisionReadiness}
+            submitLabel="Submit changes for review"
+          />
         </aside>
       </div>
 
@@ -1362,8 +1398,8 @@ function Field({
   required
 }: {
   children: React.ReactNode;
-  hint?: string;
-  label: string;
+  hint?: React.ReactNode;
+  label: React.ReactNode;
   required?: boolean;
 }) {
   return (
@@ -1375,6 +1411,36 @@ function Field({
       {children}
       {hint ? <span className="text-xs leading-5 text-travel-muted">{hint}</span> : null}
     </label>
+  );
+}
+
+function SectionAnchor({
+  children,
+  id
+}: {
+  children: React.ReactNode;
+  id: string;
+}) {
+  return (
+    <section className="scroll-mt-28" id={id}>
+      {children}
+    </section>
+  );
+}
+
+function InfoTooltip({ text }: { text: string }) {
+  return (
+    <span className="group relative inline-flex items-center">
+      <span
+        className="inline-flex size-5 items-center justify-center rounded-full border border-[#2B2B2B]/15 bg-travel-bg text-travel-muted"
+        tabIndex={0}
+      >
+        <Info className="size-3.5" />
+      </span>
+      <span className="pointer-events-none absolute left-1/2 top-full z-20 mt-2 hidden w-64 -translate-x-1/2 rounded-travel-md bg-travel-dark px-3 py-2 text-xs font-medium leading-5 text-white shadow-lg group-hover:block group-focus-within:block">
+        {text}
+      </span>
+    </span>
   );
 }
 
@@ -2357,8 +2423,12 @@ function PricingSection({
               </Select>
             </Field>
             <Field
-              label="Base currency"
-              hint="All prices are entered in USD. Customers can view converted prices in IDR, EUR, or CHF."
+              label={
+                <span className="inline-flex items-center gap-2">
+                  Base currency
+                  <InfoTooltip text="All prices are entered in USD. Customers can view converted prices in IDR, EUR, or CHF." />
+                </span>
+              }
             >
               <Input disabled readOnly value="USD" />
             </Field>
@@ -2982,15 +3052,19 @@ function MediaSection({
 }
 
 function ReadinessPanel({
-  activity,
+  activityStatusLabel,
   disabled,
+  note,
   onSubmit,
-  readiness
+  readiness,
+  submitLabel = "Submit for review"
 }: {
-  activity: PartnerActivity;
+  activityStatusLabel: string;
   disabled: boolean;
+  note?: string;
   onSubmit: () => void;
   readiness: ReturnType<typeof getReadiness>;
+  submitLabel?: string;
 }) {
   const firstMissing = readiness.items.find((item) => !item.done)?.label;
 
@@ -2998,36 +3072,39 @@ function ReadinessPanel({
     <Card>
       <CardHeader>
         <CardTitle>Submission readiness</CardTitle>
-        <CardDescription>Complete these items before requesting admin review.</CardDescription>
+        <CardDescription>Use the checklist to jump between required sections.</CardDescription>
       </CardHeader>
       <CardContent className="grid gap-4">
         <div className="rounded-travel-md border border-[#2B2B2B]/15 p-3">
           <p className="text-xs font-medium uppercase tracking-[0.12em] text-travel-muted">Current status</p>
           <div className="mt-2">
-            <Badge variant={statusVariant(activity.status)}>{formatStatus(activity.status)}</Badge>
+            <Badge variant={statusLabelVariant(activityStatusLabel)}>{activityStatusLabel}</Badge>
           </div>
         </div>
         <div className="grid gap-2">
           {readiness.items.map((item) => (
-            <div className="flex items-start gap-3 rounded-travel-md bg-travel-bg p-3" key={item.label}>
-              <span className={item.done ? "mt-0.5 text-emerald-600" : "mt-0.5 text-travel-muted"}>
+            <button
+              className="flex items-center gap-3 rounded-travel-md bg-travel-bg px-3 py-2.5 text-left transition hover:bg-[#EEF1F6]"
+              key={item.label}
+              onClick={() => scrollToSection(item.sectionId)}
+              type="button"
+            >
+              <span className={item.done ? "text-emerald-600" : "text-travel-muted"}>
                 <CheckCircle2 className="size-4" />
               </span>
-              <div>
-                <p className="text-sm font-semibold text-travel-dark">{item.label}</p>
-                <p className="mt-0.5 text-xs leading-5 text-travel-muted">{item.description}</p>
-              </div>
-            </div>
+              <span className="text-sm font-semibold text-travel-dark">{item.label}</span>
+            </button>
           ))}
         </div>
         <ButtonCTA disabled={disabled || !readiness.canSubmit} fullWidth onClick={onSubmit} type="button">
-          Submit for review
+          {submitLabel}
         </ButtonCTA>
         {!readiness.canSubmit ? (
           <p className="text-xs leading-5 text-travel-muted">
             Complete {firstMissing ?? "all required sections"} before submission.
           </p>
         ) : null}
+        {note ? <div className="rounded-travel-md bg-[#FBEAE8] p-3 text-xs leading-5 text-travel-primary">{note}</div> : null}
       </CardContent>
     </Card>
   );
@@ -3607,7 +3684,17 @@ function getReadiness({
       activity.shortDescription.trim() &&
       activity.description.trim()
   );
-  const pricingDone = activity.pricing.some((price) => price.isActive);
+  const hasOptions = (activity.options?.length ?? 0) > 0;
+  const pricingDone =
+    activity.pricing.some((price) => price.isActive) ||
+    (activity.options ?? []).some((option) => option.pricingTiers.some((tier) => tier.isActive));
+  const optionsDone = hasOptions
+    ? (activity.options ?? []).some((option) =>
+        option.isActive &&
+        (option.availabilityMode === "ALWAYS_AVAILABLE" ||
+          option.availability.some((slot) => slot.isActive))
+      )
+    : false;
   const availabilityDone = (activity.availability ?? []).some((slot) => slot.isActive);
   const mediaDone = activity.media.length > 0;
   const itineraryDone = itinerary.length > 0;
@@ -3615,13 +3702,69 @@ function getReadiness({
   const policiesDone = Boolean(policies.cancellationPolicy.trim() || policies.importantInfo.trim());
 
   const items = [
-    { description: "Title, city, category, short and full descriptions.", done: basicDone, label: "Basic details" },
-    { description: "One active primary price.", done: pricingDone, label: "Pricing" },
-    { description: "At least one active session.", done: availabilityDone, label: "Availability" },
-    { description: "At least one image or gallery item.", done: mediaDone, label: "Media" },
-    { description: "A traveler-friendly stop-by-stop plan.", done: itineraryDone, label: "Itinerary" },
-    { description: "Clear inclusions or exclusions.", done: includedDone, label: "Included / not included" },
-    { description: "Cancellation or important trip notes.", done: policiesDone, label: "Policies" }
+    { done: basicDone, label: "Basic details", sectionId: "basic-details" },
+    ...(hasOptions
+      ? [{ done: optionsDone, label: "Package options", sectionId: "options" }]
+      : [{ done: availabilityDone, label: "Availability", sectionId: "availability" }]),
+    { done: pricingDone, label: "Pricing", sectionId: "pricing" },
+    { done: mediaDone, label: "Media", sectionId: "media" },
+    { done: itineraryDone, label: "Itinerary", sectionId: "itinerary" },
+    { done: includedDone, label: "Included / not included", sectionId: "includes" },
+    { done: policiesDone, label: "Policies", sectionId: "policies" }
+  ];
+
+  return {
+    canSubmit: items.every((item) => item.done),
+    items
+  };
+}
+
+function getRevisionReadiness({
+  basic,
+  highlights,
+  included,
+  itinerary,
+  notIncluded,
+  policies,
+  snapshot
+}: {
+  basic: BasicDetailsState;
+  highlights: string[];
+  included: string[];
+  itinerary: ItineraryStop[];
+  notIncluded: string[];
+  policies: PoliciesState;
+  snapshot: ActivityRevisionSnapshot;
+}) {
+  const basicDone = Boolean(
+    basic.title.trim() &&
+      (basic.destinationId || basic.cityId) &&
+      basic.categoryId &&
+      basic.shortDescription.trim() &&
+      basic.description.trim()
+  );
+  const options = snapshot.options ?? [];
+  const pricingDone =
+    options.some((option) => option.pricingTiers.some((tier) => tier.isActive)) ||
+    ((snapshot.pricing as Array<{ isActive?: boolean }> | undefined) ?? []).some((price) => price.isActive);
+  const optionsDone = options.some((option) =>
+    option.isActive &&
+    (option.availabilityMode === "ALWAYS_AVAILABLE" ||
+      option.availability.some((slot) => slot.isActive))
+  );
+  const mediaDone = ((snapshot.media as unknown[] | undefined) ?? []).length > 0;
+  const itineraryDone = itinerary.length > 0;
+  const includedDone = included.length > 0 || notIncluded.length > 0;
+  const policiesDone = Boolean(policies.cancellationPolicy.trim() || policies.importantInfo.trim());
+
+  const items = [
+    { done: basicDone, label: "Basic details", sectionId: "basic-details" },
+    { done: optionsDone, label: "Package options", sectionId: "options" },
+    { done: pricingDone, label: "Pricing", sectionId: "options" },
+    { done: mediaDone, label: "Media", sectionId: "options" },
+    { done: itineraryDone, label: "Itinerary", sectionId: "itinerary" },
+    { done: includedDone, label: "Included / not included", sectionId: "includes" },
+    { done: policiesDone, label: "Policies", sectionId: "policies" }
   ];
 
   return {
@@ -3665,6 +3808,18 @@ function statusVariant(status: ActivityStatus) {
   if (status === "PENDING_REVIEW" || status === "REVISION_REQUESTED") return "warning";
   if (status === "REJECTED" || status === "ARCHIVED") return "danger";
   return "neutral";
+}
+
+function statusLabelVariant(label: string) {
+  if (label.includes("Published") || label.includes("Approved") || label.includes("Applied")) return "success";
+  if (label.includes("Pending") || label.includes("Revision")) return "warning";
+  if (label.includes("Rejected") || label.includes("Cancelled") || label.includes("Archived")) return "danger";
+  return "neutral";
+}
+
+function scrollToSection(sectionId: string) {
+  if (typeof document === "undefined") return;
+  document.getElementById(sectionId)?.scrollIntoView({ behavior: "smooth", block: "start" });
 }
 
 function revisionVariant(status: ActivityRevision["status"]) {

@@ -4,7 +4,7 @@ import {
   Injectable,
   NotFoundException
 } from "@nestjs/common";
-import { ActivityStatus, DestinationType, Prisma } from "@prisma/client";
+import { ActivityStatus, AvailabilityMode, DestinationType, Prisma, PricingMode } from "@prisma/client";
 import { destinationParentInclude } from "../destinations/destination.util";
 import { PrismaService } from "../prisma.service";
 import { BASE_CURRENCY } from "../common/money.constants";
@@ -12,9 +12,12 @@ import type {
   AdminActivityQueryDto,
   CreateAdminActivityAvailabilityDto,
   CreateAdminActivityMediaDto,
+  CreateAdminActivityOptionDto,
   UpdateAdminActivityAvailabilityDto,
   UpdateAdminActivityDto,
   UpdateAdminActivityMediaDto,
+  UpdateAdminActivityOptionDto,
+  UpsertAdminActivityOptionPricingDto,
   UpsertAdminActivityPricingDto
 } from "./dto/admin-activity.dto";
 
@@ -50,6 +53,15 @@ const adminActivityListInclude = {
     }
   }
 } satisfies Prisma.ActivityInclude;
+
+const adminOptionDetailInclude = {
+  availability: {
+    orderBy: { startDateTime: "asc" }
+  },
+  pricingTiers: {
+    orderBy: [{ minTravelers: "asc" }, { maxTravelers: "asc" }]
+  }
+} satisfies Prisma.ActivityOptionInclude;
 
 const adminActivityDetailInclude = {
   availability: {
@@ -241,6 +253,248 @@ export class AdminActivitiesService {
       pricingId: pricing.id
     });
     return pricing;
+  }
+
+  async listOptions(id: string) {
+    const activity = await this.get(id);
+
+    return this.prisma.activityOption.findMany({
+      where: { activityId: activity.id },
+      include: adminOptionDetailInclude,
+      orderBy: [{ sortOrder: "asc" }, { createdAt: "asc" }]
+    });
+  }
+
+  async createOption(id: string, actorUserId: string, dto: CreateAdminActivityOptionDto) {
+    const activity = await this.get(id);
+    const slug = await this.resolveAvailableOptionSlug(activity.id, dto.slug ?? dto.title);
+
+    const option = await this.prisma.activityOption.create({
+      data: {
+        activityId: activity.id,
+        availabilityMode: dto.availabilityMode ?? AvailabilityMode.SCHEDULED_SESSIONS,
+        availableDays: normalizeAvailableDays(dto.availableDays),
+        dailyCapacity: dto.dailyCapacity,
+        description: normalizeNullable(dto.description),
+        durationLabel: normalizeNullable(dto.durationLabel),
+        isActive: dto.isActive ?? true,
+        meetingPoint: normalizeNullable(dto.meetingPoint),
+        slug,
+        sortOrder: dto.sortOrder ?? 0,
+        title: dto.title.trim()
+      },
+      include: adminOptionDetailInclude
+    });
+
+    await this.audit(actorUserId, "ACTIVITY_ADMIN_OPTION_CREATED", id, { optionId: option.id });
+    return option;
+  }
+
+  async getOption(id: string, optionId: string) {
+    const activity = await this.get(id);
+    return this.getActivityOption(activity.id, optionId);
+  }
+
+  async updateOption(
+    id: string,
+    optionId: string,
+    actorUserId: string,
+    dto: UpdateAdminActivityOptionDto
+  ) {
+    const activity = await this.get(id);
+    const option = await this.getActivityOption(activity.id, optionId);
+    const slug =
+      dto.slug !== undefined || dto.title !== undefined
+        ? await this.resolveAvailableOptionSlug(activity.id, dto.slug ?? dto.title ?? option.title, option.id)
+        : undefined;
+
+    const updated = await this.prisma.activityOption.update({
+      where: { id: option.id },
+      data: {
+        availabilityMode: dto.availabilityMode,
+        availableDays:
+          dto.availableDays !== undefined ? normalizeAvailableDays(dto.availableDays) : undefined,
+        dailyCapacity: dto.dailyCapacity,
+        description: dto.description !== undefined ? normalizeNullable(dto.description) : undefined,
+        durationLabel:
+          dto.durationLabel !== undefined ? normalizeNullable(dto.durationLabel) : undefined,
+        isActive: dto.isActive,
+        meetingPoint:
+          dto.meetingPoint !== undefined ? normalizeNullable(dto.meetingPoint) : undefined,
+        slug,
+        sortOrder: dto.sortOrder,
+        title: dto.title?.trim()
+      },
+      include: adminOptionDetailInclude
+    });
+
+    await this.audit(actorUserId, "ACTIVITY_ADMIN_OPTION_UPDATED", id, { optionId: option.id });
+    return updated;
+  }
+
+  async deactivateOption(id: string, optionId: string, actorUserId: string) {
+    const activity = await this.get(id);
+    await this.getActivityOption(activity.id, optionId);
+
+    const updated = await this.prisma.activityOption.update({
+      where: { id: optionId },
+      data: { isActive: false },
+      include: adminOptionDetailInclude
+    });
+    await this.audit(actorUserId, "ACTIVITY_ADMIN_OPTION_DEACTIVATED", id, { optionId });
+    return updated;
+  }
+
+  async getOptionPricing(id: string, optionId: string) {
+    const activity = await this.get(id);
+    const option = await this.getActivityOption(activity.id, optionId);
+
+    return {
+      currency: BASE_CURRENCY,
+      pricingTiers: option.pricingTiers
+    };
+  }
+
+  async upsertOptionPricing(
+    id: string,
+    optionId: string,
+    actorUserId: string,
+    dto: UpsertAdminActivityOptionPricingDto
+  ) {
+    const activity = await this.get(id);
+    const option = await this.getActivityOption(activity.id, optionId);
+    const requestedCurrency = dto.currency.trim().toUpperCase();
+    if (requestedCurrency !== BASE_CURRENCY) {
+      throw new BadRequestException({
+        code: "ACTIVITY_OPTION_PRICING_CURRENCY_UNSUPPORTED",
+        message: "Option pricing must be entered and stored in USD"
+      });
+    }
+
+    const tiers = normalizePricingTiers(dto.tiers, BASE_CURRENCY, dto.priceType?.trim() || "per_person");
+    await this.prisma.$transaction(async (tx) => {
+      await tx.activityOptionPricingTier.deleteMany({ where: { optionId: option.id } });
+      await tx.activityOptionPricingTier.createMany({
+        data: tiers.map((tier) => ({
+          ...tier,
+          optionId: option.id
+        }))
+      });
+
+      const summaryPrice = Math.min(
+        ...tiers.filter((tier) => tier.isActive).map((tier) => tier.adultPriceCents)
+      );
+      await tx.activity.update({
+        where: { id: activity.id },
+        data: { pricingMode: PricingMode.GROUP_TIER }
+      });
+      await tx.activityPricing.updateMany({
+        where: { activityId: activity.id },
+        data: { isActive: false }
+      });
+      await tx.activityPricing.create({
+        data: {
+          activityId: activity.id,
+          currency: BASE_CURRENCY,
+          isActive: true,
+          priceCents: summaryPrice,
+          priceType: tiers[0]?.priceType ?? "per_person"
+        }
+      });
+    });
+
+    await this.audit(actorUserId, "ACTIVITY_ADMIN_OPTION_PRICING_UPDATED", id, {
+      optionId: option.id,
+      tierCount: tiers.length
+    });
+    return this.getOptionPricing(activity.id, option.id);
+  }
+
+  async listOptionAvailability(id: string, optionId: string) {
+    const activity = await this.get(id);
+    const option = await this.getActivityOption(activity.id, optionId);
+
+    return this.prisma.activityAvailability.findMany({
+      where: { activityId: activity.id, optionId: option.id },
+      orderBy: { startDateTime: "asc" }
+    });
+  }
+
+  async createOptionAvailability(
+    id: string,
+    optionId: string,
+    actorUserId: string,
+    dto: CreateAdminActivityAvailabilityDto
+  ) {
+    const activity = await this.get(id);
+    const option = await this.getActivityOption(activity.id, optionId);
+    this.assertScheduledOption(option.availabilityMode);
+
+    const availability = await this.prisma.activityAvailability.create({
+      data: {
+        activityId: activity.id,
+        optionId: option.id,
+        capacity: dto.capacity,
+        endDateTime: dto.endDateTime ? new Date(dto.endDateTime) : null,
+        isActive: dto.isActive ?? true,
+        startDateTime: new Date(dto.startDateTime)
+      }
+    });
+    await this.audit(actorUserId, "ACTIVITY_ADMIN_OPTION_AVAILABILITY_CREATED", id, {
+      optionId: option.id,
+      availabilityId: availability.id
+    });
+    return availability;
+  }
+
+  async updateOptionAvailability(
+    id: string,
+    optionId: string,
+    availabilityId: string,
+    actorUserId: string,
+    dto: UpdateAdminActivityAvailabilityDto
+  ) {
+    const activity = await this.get(id);
+    const option = await this.getActivityOption(activity.id, optionId);
+    this.assertScheduledOption(option.availabilityMode);
+    await this.getActivityAvailability(activity.id, availabilityId, option.id);
+
+    const availability = await this.prisma.activityAvailability.update({
+      where: { id: availabilityId },
+      data: {
+        capacity: dto.capacity,
+        endDateTime: dto.endDateTime !== undefined ? new Date(dto.endDateTime) : undefined,
+        isActive: dto.isActive,
+        startDateTime:
+          dto.startDateTime !== undefined ? new Date(dto.startDateTime) : undefined
+      }
+    });
+    await this.audit(actorUserId, "ACTIVITY_ADMIN_OPTION_AVAILABILITY_UPDATED", id, {
+      optionId: option.id,
+      availabilityId
+    });
+    return availability;
+  }
+
+  async deactivateOptionAvailability(
+    id: string,
+    optionId: string,
+    availabilityId: string,
+    actorUserId: string
+  ) {
+    const activity = await this.get(id);
+    const option = await this.getActivityOption(activity.id, optionId);
+    await this.getActivityAvailability(activity.id, availabilityId, option.id);
+
+    const availability = await this.prisma.activityAvailability.update({
+      where: { id: availabilityId },
+      data: { isActive: false }
+    });
+    await this.audit(actorUserId, "ACTIVITY_ADMIN_OPTION_AVAILABILITY_DEACTIVATED", id, {
+      optionId: option.id,
+      availabilityId
+    });
+    return availability;
   }
 
   async listAvailability(id: string) {
@@ -679,9 +933,63 @@ export class AdminActivitiesService {
     return slug;
   }
 
-  private async getActivityAvailability(activityId: string, availabilityId: string) {
+  private assertScheduledOption(availabilityMode: AvailabilityMode) {
+    if (availabilityMode !== AvailabilityMode.SCHEDULED_SESSIONS) {
+      throw new BadRequestException({
+        code: "ACTIVITY_OPTION_SESSION_NOT_ALLOWED",
+        message: "Scheduled sessions can only be managed for scheduled-session options"
+      });
+    }
+  }
+
+  private async resolveAvailableOptionSlug(activityId: string, value: string, excludeOptionId?: string) {
+    const slug = slugify(value);
+
+    if (!slug) {
+      throw new BadRequestException({
+        code: "ACTIVITY_OPTION_SLUG_REQUIRED",
+        message: "Activity option slug could not be generated"
+      });
+    }
+
+    const existing = await this.prisma.activityOption.findFirst({
+      where: {
+        activityId,
+        slug,
+        ...(excludeOptionId ? { id: { not: excludeOptionId } } : {})
+      },
+      select: { id: true }
+    });
+
+    if (existing) {
+      throw new ConflictException({
+        code: "ACTIVITY_OPTION_SLUG_TAKEN",
+        message: "Activity option slug is already used for this activity"
+      });
+    }
+
+    return slug;
+  }
+
+  private async getActivityOption(activityId: string, optionId: string) {
+    const option = await this.prisma.activityOption.findFirst({
+      where: { activityId, id: optionId },
+      include: adminOptionDetailInclude
+    });
+
+    if (!option) {
+      throw new NotFoundException({
+        code: "ACTIVITY_OPTION_NOT_FOUND",
+        message: "Activity option was not found"
+      });
+    }
+
+    return option;
+  }
+
+  private async getActivityAvailability(activityId: string, availabilityId: string, optionId?: string) {
     const availability = await this.prisma.activityAvailability.findFirst({
-      where: { activityId, id: availabilityId }
+      where: { activityId, id: availabilityId, ...(optionId ? { optionId } : {}) }
     });
 
     if (!availability) {
@@ -744,6 +1052,92 @@ function normalizeJson(value: unknown) {
   }
 
   return value as Prisma.InputJsonValue;
+}
+
+const validWeekdays = new Set([
+  "MONDAY",
+  "TUESDAY",
+  "WEDNESDAY",
+  "THURSDAY",
+  "FRIDAY",
+  "SATURDAY",
+  "SUNDAY"
+]);
+
+function normalizeAvailableDays(value?: string[]) {
+  if (value === undefined) return undefined;
+  const days = [...new Set(value.map((day) => day.trim().toUpperCase()))].filter(Boolean);
+  const invalid = days.filter((day) => !validWeekdays.has(day));
+
+  if (invalid.length) {
+    throw new BadRequestException({
+      code: "ACTIVITY_OPTION_AVAILABLE_DAYS_INVALID",
+      message: "Available days must be weekday names",
+      details: { invalid }
+    });
+  }
+
+  return days as Prisma.InputJsonValue;
+}
+
+function normalizePricingTiers(
+  tiers: NonNullable<UpsertAdminActivityOptionPricingDto["tiers"]>,
+  currency: string,
+  priceType: string
+) {
+  if (!tiers.length) {
+    throw new BadRequestException({
+      code: "ACTIVITY_PRICING_TIERS_REQUIRED",
+      message: "Group tier pricing requires at least one pricing tier"
+    });
+  }
+
+  const normalized = tiers
+    .map((tier) => {
+      const discount = tier.childDiscountPercent ?? 27;
+      const childAllowed = tier.childAllowed ?? true;
+      return {
+        adultPriceCents: tier.adultPriceCents,
+        childDiscountPercent: childAllowed ? new Prisma.Decimal(discount) : null,
+        childPriceCents: childAllowed
+          ? tier.childPriceCents ?? Math.round(tier.adultPriceCents * (1 - discount / 100))
+          : null,
+        currency,
+        isActive: tier.isActive ?? true,
+        maxTravelers: tier.maxTravelers,
+        minTravelers: tier.minTravelers,
+        priceType
+      };
+    })
+    .sort((a, b) => a.minTravelers - b.minTravelers);
+
+  const active = normalized.filter((tier) => tier.isActive);
+  if (!active.length) {
+    throw new BadRequestException({
+      code: "ACTIVITY_ACTIVE_PRICING_TIER_REQUIRED",
+      message: "At least one pricing tier must be active"
+    });
+  }
+
+  for (let index = 0; index < active.length; index += 1) {
+    const tier = active[index];
+    if (tier.maxTravelers < tier.minTravelers) {
+      throw new BadRequestException({
+        code: "ACTIVITY_PRICING_TIER_RANGE_INVALID",
+        message: "Tier maximum travelers must be greater than or equal to its minimum"
+      });
+    }
+
+    const previous = active[index - 1];
+    if (previous && tier.minTravelers <= previous.maxTravelers) {
+      throw new BadRequestException({
+        code: "ACTIVITY_PRICING_TIERS_OVERLAP",
+        message: "Active pricing tier traveler ranges cannot overlap"
+      });
+    }
+  }
+
+  return normalized;
 }
 
 function slugify(value: string) {
