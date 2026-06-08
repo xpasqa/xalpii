@@ -7,7 +7,7 @@ import { routes } from "../../lib/routes";
 export default function LoginPage() {
   return (
     <AuthFormCard
-      description="Access your Alpii dashboard with your registered account."
+      description="Log in to manage bookings, saved experiences, and account details."
       fields={[
         {
           name: "email",
@@ -26,13 +26,13 @@ export default function LoginPage() {
       ]}
       footer={
         <>
-          New to Alpii? <AuthLink href={routes.register}>Create an account</AuthLink> or{" "}
-          <AuthLink href={routes.partnerRegister}>become a partner</AuthLink>.
+          Don't have an account? <AuthLink href={routes.register}>Sign up</AuthLink>
         </>
       }
       onSubmit={(values) => login({ email: values.email, password: values.password })}
       submitLabel="Log in"
-      title="Welcome back"
+      title="Log in"
+      variant="simple"
     />
   );
 }

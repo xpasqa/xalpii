@@ -7,7 +7,7 @@ import { routes } from "../../lib/routes";
 export default function RegisterPage() {
   return (
     <AuthFormCard
-      description="Create a traveler account for future bookings and vouchers."
+      description="Create an account to save experiences and manage future bookings."
       fields={[
         {
           name: "fullName",
@@ -32,8 +32,7 @@ export default function RegisterPage() {
       ]}
       footer={
         <>
-          Already registered? <AuthLink href={routes.login}>Log in</AuthLink>. Running an
-          experience? <AuthLink href={routes.partnerRegister}>Register as partner</AuthLink>.
+          Already have an account? <AuthLink href={routes.login}>Log in</AuthLink>
         </>
       }
       onSubmit={(values) =>
@@ -43,8 +42,9 @@ export default function RegisterPage() {
           password: values.password
         })
       }
-      submitLabel="Create account"
-      title="Create your account"
+      submitLabel="Sign up"
+      title="Sign up"
+      variant="simple"
     />
   );
 }
