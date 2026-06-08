@@ -4,8 +4,8 @@ import type { ReactNode } from "react";
 import { useEffect, useState } from "react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { Search } from "lucide-react";
 import { routes } from "../../lib/routes";
+import { PublicSearchBar } from "../domain/public/PublicSearchBar";
 import { useCurrency } from "../providers/CurrencyProvider";
 
 type PublicShellProps = {
@@ -75,29 +75,16 @@ export function PublicShell({ children }: PublicShellProps) {
                 </Link>
               </nav>
 
-              <form
+              <div
                 className={[
-                  "absolute left-[180px] hidden h-11 w-full max-w-[500px] items-center gap-3 rounded-full border border-travel-border bg-white px-4 shadow-[0_10px_26px_rgba(26,26,26,0.12)] transition duration-300 md:flex",
+                  "absolute left-[180px] hidden w-full max-w-[500px] transition duration-300 md:block",
                   showSearch
                     ? "translate-y-0 opacity-100"
                     : "pointer-events-none translate-y-1 opacity-0"
                 ].join(" ")}
-                onSubmit={(event) => event.preventDefault()}
               >
-                <Search className="size-5 shrink-0 text-travel-muted" />
-                <input
-                  aria-label="Find places and things to do"
-                  className="min-w-0 flex-1 bg-transparent font-interface text-[15px] font-normal text-travel-dark outline-none placeholder:text-travel-muted"
-                  placeholder="Find places and things to do"
-                  type="search"
-                />
-                <button
-                  className="h-9 rounded-full bg-travel-primary px-6 font-interface text-sm font-semibold text-white transition hover:bg-[#A51E14] active:bg-[#8F1A12]"
-                  type="submit"
-                >
-                  Search
-                </button>
-              </form>
+                <PublicSearchBar compact placeholder="Find places and things to do" />
+              </div>
             </>
           )}
 

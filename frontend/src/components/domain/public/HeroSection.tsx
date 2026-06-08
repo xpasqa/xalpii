@@ -1,27 +1,19 @@
 "use client";
 
-import { Search } from "lucide-react";
+import { PublicSearchBar } from "./PublicSearchBar";
 
 export function HeroSection() {
   return (
-    <section className="bg-white">
-      <div className="relative min-h-[80vh] overflow-hidden bg-black">
-        <video
-          aria-hidden="true"
-          autoPlay
+    <section className="relative z-40 bg-white">
+      <div className="relative min-h-[80vh] overflow-visible bg-black">
+        <img
+          alt="Travelers exploring outdoors"
           className="absolute inset-0 size-full object-cover"
-          loop
-          muted
-          playsInline
-        >
-          <source
-            src="https://alpii.folkatech.com/visit_norway.webm"
-            type="video/webm"
-          />
-        </video>
-        <div className="absolute inset-0 bg-black/30" />
-        <div className="absolute inset-0 bg-gradient-to-b from-black/12 via-black/24 to-black/58" />
-        <div className="relative mx-auto flex min-h-[80vh] max-w-7xl flex-col items-center justify-center px-4 pb-16 pt-24 text-center sm:px-6 lg:px-8">
+          src="https://images.unsplash.com/photo-1539635278303-d4002c07eae3?q=80&w=2070&auto=format&fit=crop&ixlib=rb-4.1.0&ixid=M3wxMjA3fDB8MHxwaG90by1wYWdlfHx8fGVufDB8fHx8fA%3D%3D"
+        />
+        <div className="absolute inset-0 bg-black/20" />
+        <div className="absolute inset-0 bg-gradient-to-b from-black/5 via-black/15 to-black/35" />
+        <div className="relative z-50 mx-auto flex min-h-[80vh] max-w-7xl flex-col items-center justify-center px-4 pb-16 pt-24 text-center sm:px-6 lg:px-8">
           <div className="mx-auto max-w-4xl pb-6 text-center text-white">
             <h1 className="whitespace-normal font-brand text-4xl font-bold leading-[1.12] text-white sm:text-5xl lg:whitespace-nowrap lg:text-[54px]">
               Experience More, Plan Less.
@@ -31,24 +23,7 @@ export function HeroSection() {
             </p>
           </div>
 
-          <form
-            className="flex w-full max-w-3xl items-center gap-2 rounded-[14px] bg-white p-2 shadow-[0_18px_44px_rgba(0,0,0,0.22)]"
-            onSubmit={(event) => event.preventDefault()}
-          >
-            <Search className="ml-4 size-5 shrink-0 text-travel-muted" />
-            <input
-              aria-label="Search destinations or experiences"
-              className="h-12 min-w-0 flex-1 bg-transparent font-interface text-base font-medium text-travel-dark outline-none placeholder:text-travel-muted/75"
-              placeholder="Where are you going?"
-              type="search"
-            />
-            <button
-              className="h-12 rounded-[11px] bg-travel-primary px-7 font-interface text-sm font-semibold text-white transition hover:bg-[#A51E14] active:bg-[#8F1A12]"
-              type="submit"
-            >
-              Search
-            </button>
-          </form>
+          <PublicSearchBar placeholder="Search destinations, activities, regions..." />
         </div>
       </div>
     </section>

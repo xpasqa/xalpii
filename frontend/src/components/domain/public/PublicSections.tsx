@@ -316,26 +316,24 @@ export function SiteFooter() {
 
 export function CityHero({ city }: { city: TravelCity }) {
   return (
-    <section className="border-b border-travel-border bg-white">
-      <div className="mx-auto grid max-w-7xl gap-8 px-4 py-10 sm:px-6 lg:grid-cols-[0.85fr_1.15fr] lg:px-8 lg:py-14">
-        <div className="flex flex-col justify-center">
-          <p className="font-interface text-sm font-medium text-travel-primary">
-            {city.region}
-          </p>
-          <h1 className="mt-3 font-brand text-4xl font-bold leading-tight text-travel-dark sm:text-5xl">
-            Things to do in {city.name}
-          </h1>
-          <p className="mt-4 max-w-2xl font-interface text-base leading-7 text-travel-muted">
-            {city.description}
-          </p>
-        </div>
-        <div className="overflow-hidden rounded-travel-lg bg-travel-bg shadow-travel-card">
-          <img
-            alt={`${city.name} travel experiences`}
-            className="aspect-[16/10] w-full object-cover"
-            src={city.heroImageUrl}
-          />
-        </div>
+    <section className="relative min-h-[46vh] overflow-hidden bg-travel-dark">
+      <img
+        alt={`${city.name} travel experiences`}
+        className="absolute inset-0 size-full object-cover"
+        src={city.heroImageUrl}
+      />
+      <div className="absolute inset-0 bg-black/20" />
+      <div className="absolute inset-0 bg-gradient-to-b from-black/10 via-black/18 to-black/38" />
+      <div className="relative mx-auto flex min-h-[46vh] max-w-7xl flex-col items-center justify-center px-4 pb-10 pt-24 text-center sm:px-6 lg:px-8">
+        <p className="font-interface text-sm font-semibold uppercase tracking-[0.12em] text-white/82">
+          {city.region}
+        </p>
+        <h1 className="mt-3 max-w-4xl font-brand text-4xl font-bold leading-tight text-white sm:text-5xl lg:text-[54px]">
+          Things to do in {city.name}
+        </h1>
+        <p className="mx-auto mt-4 max-w-2xl font-interface text-base leading-7 text-white/88 sm:text-lg">
+          {city.description}
+        </p>
       </div>
     </section>
   );
