@@ -19,7 +19,7 @@ export function Calendar({ className, classNames, ...props }: CalendarProps) {
         caption_label: "font-brand text-lg font-semibold text-travel-dark md:text-base",
         day: "h-11 w-11 p-0 text-sm text-travel-dark md:h-10 md:w-10",
         day_button:
-          "flex size-11 items-center justify-center rounded-[12px] font-interface text-[15px] font-medium text-travel-dark transition hover:bg-[#FBEAE8] hover:text-travel-primary md:size-10 md:text-sm",
+          "m-[2px] flex size-10 items-center justify-center rounded-[10px] font-interface text-[15px] font-medium text-travel-dark transition hover:bg-[#FBEAE8] hover:text-travel-primary md:size-9 md:text-sm",
         disabled: "cursor-not-allowed text-travel-muted opacity-35 hover:bg-transparent hover:text-travel-muted",
         month: "grid gap-4",
         month_caption: "flex h-11 items-center justify-center",
@@ -32,7 +32,7 @@ export function Calendar({ className, classNames, ...props }: CalendarProps) {
         range_start: "bg-travel-primary text-white",
         root: "relative",
         selected:
-          "bg-travel-primary text-white hover:bg-travel-primary hover:text-white focus:bg-travel-primary focus:text-white",
+          "bg-transparent text-white [&>button]:bg-travel-primary [&>button]:text-white [&>button]:hover:bg-travel-primary [&>button]:hover:text-white [&>button]:focus:bg-travel-primary [&>button]:focus:text-white",
         today: "font-semibold text-travel-primary",
         week: "mt-2 flex w-full justify-between",
         weekday: "w-11 text-center text-[12px] font-medium text-travel-muted md:w-10 md:text-[11px]",

@@ -41,8 +41,8 @@ export default async function ActivityPage({ params }: ActivityPageProps) {
   return (
     <PublicShell>
       <ActivityAvailabilityProvider>
-        <main className="mx-auto grid max-w-7xl items-start gap-10 px-4 py-8 sm:px-6 lg:grid-cols-[minmax(0,1fr)_380px] lg:px-8">
-          <div className="space-y-8">
+        <main className="mx-auto max-w-7xl px-4 py-8 sm:px-6 lg:px-8">
+          <div className="space-y-8 lg:pr-[420px]">
             <ActivityIntro activity={activity} />
             <ActivityDetailGallery activity={activity} />
             <p className="font-interface text-[14px] font-normal leading-6 text-travel-dark/85">
@@ -56,8 +56,8 @@ export default async function ActivityPage({ params }: ActivityPageProps) {
             <ActivityItinerarySection activity={activity} />
             <ActivityContentSections activity={activity} />
           </div>
-          <aside className="hidden lg:block">
-            <div className="sticky top-[132px] max-h-[calc(100vh-148px)] overflow-y-auto">
+          <aside className="pointer-events-none fixed bottom-8 right-[max(2rem,calc((100vw-80rem)/2+2rem))] top-[88px] z-30 hidden w-[380px] lg:block">
+            <div className="pointer-events-auto h-full overflow-y-auto overscroll-contain pb-4">
               <ActivityBookingBox activity={activity} />
             </div>
           </aside>

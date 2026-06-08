@@ -54,11 +54,13 @@ type AvailabilityResultsState = {
   children: number;
   packages: AvailablePackage[];
   selectedDate: string;
+  selectedOptionId?: string;
 };
 
 type AvailabilityResultsContextValue = {
   clearResults: () => void;
   results: AvailabilityResultsState | null;
+  selectPackage: (optionId: string) => void;
   setResults: (results: AvailabilityResultsState) => void;
 };
 
@@ -81,6 +83,8 @@ export function ActivityAvailabilityProvider({ children }: { children: ReactNode
       value={{
         clearResults: () => setResultsState(null),
         results,
+        selectPackage: (optionId: string) =>
+          setResultsState((current) => (current ? { ...current, selectedOptionId: optionId } : current)),
         setResults: setResultsState
       }}
     >
@@ -96,6 +100,7 @@ function useAvailabilityResults() {
     return {
       clearResults: () => undefined,
       results: null,
+      selectPackage: () => undefined,
       setResults: () => undefined
     };
   }
@@ -214,56 +219,81 @@ export function ActivityDetailGallery({ activity }: DetailSectionProps) {
 
 export function ActivityBookingBox({ activity }: DetailSectionProps) {
   const { currency: displayCurrency } = useCurrency();
-  const { clearResults, setResults } = useAvailabilityResults();
+  const { results, setResults } = useAvailabilityResults();
   const isDesktopCalendar = useDesktopCalendar();
   const isDesktopBooking = isDesktopCalendar;
   const activeOptions = (activity.options ?? []).filter((option) => option.isActive);
-  const [adults, setAdults] = useState(1);
+  const [adults, setAdults] = useState(2);
   const [children, setChildren] = useState(0);
   const [openPanel, setOpenPanel] = useState<"date" | "travelers" | null>(null);
   const [selectedDate, setSelectedDate] = useState("");
   const [inlineError, setInlineError] = useState<string | null>(null);
+  const [isSearchingAvailability, setIsSearchingAvailability] = useState(false);
   const childDiscountBadge = firstDiscountBadge(activeOptions, activity);
-
-  function resetPackageSelection() {
-    clearResults();
-  }
+  const totalTravelers = adults + children;
+  const selectedPackage =
+    results?.packages.find((item) => item.option.id === results.selectedOptionId) ?? results?.packages[0];
+  const sidebarTotalPrice = selectedPackage?.estimate.totalAmountCents ?? activity.price * totalTravelers;
+  const sidebarUnitPrice = Math.round(sidebarTotalPrice / Math.max(totalTravelers, 1));
+  const searchButtonLabel = results ? "Update search" : "Check availability";
 
   function selectDate(date: string) {
     setSelectedDate(date);
-    setOpenPanel(null);
+    setOpenPanel("travelers");
     setInlineError(null);
-    resetPackageSelection();
   }
 
   function updateAdults(value: number) {
     setAdults(value);
-    resetPackageSelection();
   }
 
   function updateChildren(value: number) {
     setChildren(value);
-    resetPackageSelection();
+  }
+
+  function updateAvailabilityResults(options?: { scroll?: boolean; wait?: boolean }) {
+    if (!selectedDate || totalTravelers < 1) return;
+
+    setIsSearchingAvailability(true);
+
+    window.setTimeout(
+      () => {
+        const packages = getAvailablePackages({ activity, adults, children, selectedDate });
+        const selectedOptionId = packages.some((item) => item.option.id === results?.selectedOptionId)
+          ? results?.selectedOptionId
+          : packages[0]?.option.id;
+
+        setResults({ adults, children, packages, selectedDate, selectedOptionId });
+        setIsSearchingAvailability(false);
+
+        if (options?.scroll) {
+          window.setTimeout(() => {
+            document.getElementById("availability-results")?.scrollIntoView({
+              behavior: "smooth",
+              block: "center"
+            });
+          }, 80);
+        }
+      },
+      options?.wait ? 1200 : 0
+    );
   }
 
   function checkAvailability() {
     if (!selectedDate) {
-      setInlineError("Please select a date.");
-      if (!isDesktopBooking) {
-        setOpenPanel("date");
-      }
+      setInlineError(null);
+      setOpenPanel("date");
+      return;
+    }
+
+    if (totalTravelers < 1) {
+      setInlineError(null);
+      setOpenPanel("travelers");
       return;
     }
 
     setInlineError(null);
-    const packages = getAvailablePackages({ activity, adults, children, selectedDate });
-    setResults({ adults, children, packages, selectedDate });
-    window.setTimeout(() => {
-      document.getElementById("availability-results")?.scrollIntoView({
-        behavior: "smooth",
-        block: "start"
-      });
-    }, 0);
+    updateAvailabilityResults({ scroll: true });
   }
 
   return (
@@ -271,11 +301,25 @@ export function ActivityBookingBox({ activity }: DetailSectionProps) {
       <Card className={`${containerOutlineClass} shadow-[0_14px_32px_rgba(26,26,26,0.08)]`}>
         <CardContent className="space-y-4 p-4 sm:p-5">
           <div className="font-interface text-travel-dark">
-            <p className="text-xs font-medium text-travel-muted">From</p>
-            <span className="mt-1 inline-block text-2xl font-semibold tracking-normal">
-              {formatMoney(activity.price, displayCurrency)}
-            </span>
-            <span className="ml-2 text-xs font-normal text-travel-muted">per person</span>
+            {totalTravelers > 0 ? (
+              <>
+                <p className="text-xs font-medium text-travel-muted">Total</p>
+                <span className="mt-1 block text-2xl font-semibold tracking-normal">
+                  {formatMoney(sidebarTotalPrice, displayCurrency)}
+                </span>
+                <span className="mt-1 block text-xs font-normal text-travel-muted">
+                  {totalTravelers} {totalTravelers === 1 ? "Traveler" : "Travelers"} x {formatMoney(sidebarUnitPrice, displayCurrency)}
+                </span>
+              </>
+            ) : (
+              <>
+                <p className="text-xs font-medium text-travel-muted">From</p>
+                <span className="mt-1 inline-block text-2xl font-semibold tracking-normal">
+                  {formatMoney(activity.price, displayCurrency)}
+                </span>
+                <span className="ml-2 text-xs font-normal text-travel-muted">per person</span>
+              </>
+            )}
           </div>
 
           <div className={`relative grid rounded-travel-lg border ${containerOutlineClass} md:grid-cols-2`}>
@@ -287,7 +331,7 @@ export function ActivityBookingBox({ activity }: DetailSectionProps) {
                 >
                   <PopoverTrigger asChild>
                     <button
-                      className="flex min-h-[58px] items-center justify-between px-3 py-2.5 text-left transition hover:bg-travel-bg"
+                      className="flex min-h-[58px] items-center justify-between rounded-l-[11px] px-3 py-2.5 text-left transition hover:bg-travel-bg"
                       type="button"
                     >
                       <span>
@@ -312,7 +356,7 @@ export function ActivityBookingBox({ activity }: DetailSectionProps) {
                   </PopoverContent>
                 </Popover>
                 <button
-                  className={`flex min-h-[58px] items-center justify-between border-t px-3 py-2.5 text-left transition hover:bg-travel-bg ${containerOutlineClass} md:border-l md:border-t-0`}
+                  className={`flex min-h-[58px] items-center justify-between rounded-r-[11px] border-t px-3 py-2.5 text-left transition hover:bg-travel-bg ${containerOutlineClass} md:border-l md:border-t-0`}
                   onClick={() => setOpenPanel(openPanel === "travelers" ? null : "travelers")}
                   type="button"
                 >
@@ -326,13 +370,16 @@ export function ActivityBookingBox({ activity }: DetailSectionProps) {
                 </button>
 
                 {openPanel === "travelers" ? (
-                  <div className="absolute left-0 right-0 top-[calc(100%+8px)] z-40 rounded-travel-lg border border-[#2B2B2B]/20 bg-white p-4 shadow-[0_16px_36px_rgba(26,26,26,0.14)]">
+                  <div className="absolute left-0 right-0 top-[calc(100%+8px)] z-40 rounded-travel-lg border border-[#2B2B2B]/20 bg-white p-3 shadow-[0_16px_36px_rgba(26,26,26,0.14)]">
                     <TravelerPicker
                       adults={adults}
                       childDiscountBadge={childDiscountBadge}
                       children={children}
                       onAdultsChange={updateAdults}
-                      onApply={() => setOpenPanel(null)}
+                      onApply={() => {
+                        setOpenPanel(null);
+                        updateAvailabilityResults({ scroll: true, wait: true });
+                      }}
                       onChildrenChange={updateChildren}
                     />
                   </div>
@@ -341,7 +388,7 @@ export function ActivityBookingBox({ activity }: DetailSectionProps) {
             ) : (
               <>
                 <button
-                  className="flex min-h-[62px] items-center justify-between px-3 py-3 text-left transition hover:bg-travel-bg"
+                  className="flex min-h-[62px] items-center justify-between rounded-t-[11px] px-3 py-3 text-left transition hover:bg-travel-bg"
                   onClick={() => setOpenPanel("date")}
                   type="button"
                 >
@@ -356,7 +403,7 @@ export function ActivityBookingBox({ activity }: DetailSectionProps) {
                   <CalendarDays className="size-4 text-travel-muted" />
                 </button>
                 <button
-                  className={`flex min-h-[62px] items-center justify-between border-t px-3 py-3 text-left transition hover:bg-travel-bg ${containerOutlineClass}`}
+                  className={`flex min-h-[62px] items-center justify-between rounded-b-[11px] border-t px-3 py-3 text-left transition hover:bg-travel-bg ${containerOutlineClass}`}
                   onClick={() => setOpenPanel("travelers")}
                   type="button"
                 >
@@ -375,11 +422,16 @@ export function ActivityBookingBox({ activity }: DetailSectionProps) {
           </div>
 
           {inlineError ? <p className="text-sm font-semibold text-red-700">{inlineError}</p> : null}
-          <p className="text-xs leading-5 text-travel-muted">Select a package after checking availability.</p>
+          {isSearchingAvailability ? (
+            <div className="flex items-center gap-2 rounded-travel-md bg-[#F3FAF7] px-3 py-2 font-interface text-xs font-semibold text-travel-dark">
+              <span className="size-2 animate-pulse rounded-full bg-travel-primary" />
+              Calculating availability and prices...
+            </div>
+          ) : null}
 
           <div className="hidden md:block">
-            <ButtonCTA fullWidth onClick={checkAvailability} size="lg" type="button">
-              Check availability
+            <ButtonCTA disabled={isSearchingAvailability} fullWidth onClick={checkAvailability} size="lg" type="button">
+              {isSearchingAvailability ? "Calculating..." : searchButtonLabel}
             </ButtonCTA>
           </div>
 
@@ -405,14 +457,19 @@ export function ActivityBookingBox({ activity }: DetailSectionProps) {
             <div className="mx-auto flex max-w-7xl items-center gap-3">
               <div className="min-w-0 flex-1">
                 <p className="text-[11px] font-medium uppercase tracking-[0.08em] text-travel-muted">
-                  From
+                  {totalTravelers > 0 ? "Total" : "From"}
                 </p>
                 <p className="truncate font-interface text-base font-semibold text-travel-dark">
-                  {formatMoney(activity.price, displayCurrency)}
+                  {formatMoney(totalTravelers > 0 ? sidebarTotalPrice : activity.price, displayCurrency)}
                 </p>
+                {totalTravelers > 0 ? (
+                  <p className="truncate font-interface text-[11px] leading-4 text-travel-muted">
+                    {totalTravelers} {totalTravelers === 1 ? "Traveler" : "Travelers"} x {formatMoney(sidebarUnitPrice, displayCurrency)}
+                  </p>
+                ) : null}
               </div>
-              <ButtonCTA className="h-12 flex-1 rounded-[12px]" fullWidth onClick={checkAvailability} size="lg" type="button">
-                Check availability
+              <ButtonCTA className="h-12 flex-1 rounded-[12px]" disabled={isSearchingAvailability} fullWidth onClick={checkAvailability} size="lg" type="button">
+                {isSearchingAvailability ? "Calculating..." : searchButtonLabel}
               </ButtonCTA>
             </div>
           </div>
@@ -452,7 +509,10 @@ export function ActivityBookingBox({ activity }: DetailSectionProps) {
           childDiscountBadge={childDiscountBadge}
           children={children}
           onAdultsChange={updateAdults}
-          onApply={() => setOpenPanel(null)}
+          onApply={() => {
+            setOpenPanel(null);
+            updateAvailabilityResults({ scroll: true, wait: true });
+          }}
           onChildrenChange={updateChildren}
         />
       </Dialog>
@@ -491,7 +551,7 @@ function TravelerPicker({
 }) {
   return (
     <>
-      <div className="space-y-4">
+      <div className="space-y-3">
         <TravelerStepper
           description="Age 14-105"
           label="Adult"
@@ -511,7 +571,7 @@ function TravelerPicker({
           value={children}
         />
       </div>
-      <ButtonCTA className="mt-5 h-12 rounded-[12px]" fullWidth onClick={onApply} size="lg" type="button">
+      <ButtonCTA className="mt-4 h-11 rounded-[12px]" fullWidth onClick={onApply} size="lg" type="button">
         Apply
       </ButtonCTA>
     </>
@@ -536,28 +596,28 @@ function TravelerStepper({
   value: number;
 }) {
   return (
-    <div className="flex items-center justify-between gap-4">
+    <div className="flex items-center justify-between gap-3">
       <div>
         <div className="flex items-center gap-2">
-          <p className="text-base font-semibold text-travel-dark">{label}</p>
-          {badge ? <span className="rounded-full bg-[#FBEAE8] px-2 py-0.5 text-[11px] font-semibold text-travel-primary">{badge}</span> : null}
+          <p className="text-sm font-semibold leading-5 text-travel-dark">{label}</p>
+          {badge ? <span className="rounded-full bg-[#FBEAE8] px-2 py-0.5 text-[10px] font-semibold leading-4 text-travel-primary">{badge}</span> : null}
         </div>
-        <p className="mt-0.5 text-[13px] text-travel-muted">{description}</p>
+        <p className="mt-0.5 text-xs leading-4 text-travel-muted">{description}</p>
       </div>
       <div className="flex items-center gap-3">
         <button
           aria-label={`Decrease ${label}`}
-          className="flex size-10 items-center justify-center rounded-full border border-[#2B2B2B]/20 text-xl disabled:opacity-35"
+          className="flex size-8 items-center justify-center rounded-full border border-[#2B2B2B]/20 text-base disabled:opacity-35"
           disabled={value <= min}
           onClick={() => onChange(Math.max(min, value - 1))}
           type="button"
         >
           -
         </button>
-        <span className="w-8 text-center text-lg font-semibold">{value}</span>
+        <span className="w-6 text-center text-base font-semibold">{value}</span>
         <button
           aria-label={`Increase ${label}`}
-          className="flex size-10 items-center justify-center rounded-full border border-[#2B2B2B]/20 text-xl disabled:opacity-35"
+          className="flex size-8 items-center justify-center rounded-full border border-[#2B2B2B]/20 text-base disabled:opacity-35"
           disabled={value >= max}
           onClick={() => onChange(Math.min(max, value + 1))}
           type="button"
@@ -577,15 +637,19 @@ type AvailablePackage = {
 
 export function ActivityAvailabilityResults({ activity }: DetailSectionProps) {
   const { currency: displayCurrency } = useCurrency();
-  const { results } = useAvailabilityResults();
+  const { results, selectPackage } = useAvailabilityResults();
   const [selectedOptionId, setSelectedOptionId] = useState("");
   const [selectedAvailabilityId, setSelectedAvailabilityId] = useState("");
 
   useEffect(() => {
     const firstPackage = results?.packages[0];
-    setSelectedOptionId(firstPackage?.option.id ?? "");
-    setSelectedAvailabilityId(firstPackage?.sessions[0]?.id ?? "");
-  }, [results]);
+    const selectedPackage = results?.packages.find((item) => item.option.id === results.selectedOptionId) ?? firstPackage;
+    setSelectedOptionId(selectedPackage?.option.id ?? "");
+    setSelectedAvailabilityId(selectedPackage?.sessions[0]?.id ?? "");
+    if (firstPackage && !results?.selectedOptionId) {
+      selectPackage(firstPackage.option.id);
+    }
+  }, [results, selectPackage]);
 
   if (!results) return null;
 
@@ -628,6 +692,7 @@ export function ActivityAvailabilityResults({ activity }: DetailSectionProps) {
                   onSelect={() => {
                     setSelectedOptionId(item.option.id);
                     setSelectedAvailabilityId(item.sessions[0]?.id ?? "");
+                    selectPackage(item.option.id);
                   }}
                   onSessionChange={setSelectedAvailabilityId}
                   selectedDate={results.selectedDate}
@@ -695,12 +760,6 @@ function InlinePackageOption({
         isSelected ? "border-travel-primary shadow-[0_12px_28px_rgba(185,34,22,0.08)]" : "border-[#2B2B2B]/20"
       ].join(" ")}
     >
-      {isSelected && isBestSeller ? (
-        <span className="absolute left-5 top-0 -translate-y-1/2 rounded-full bg-[#FBEAE8] px-3 py-1 font-interface text-[11px] font-semibold text-travel-primary">
-          Best seller
-        </span>
-      ) : null}
-
       <button
         className="grid w-full items-center gap-4 p-4 text-left sm:grid-cols-[minmax(0,1fr)_260px]"
         onClick={onSelect}
@@ -716,9 +775,16 @@ function InlinePackageOption({
             {isSelected ? <span className="size-2.5 rounded-full bg-travel-primary" /> : null}
           </span>
           <div className="min-w-0">
-            <h3 className="font-brand text-[1rem] font-semibold leading-tight text-travel-dark">
-              {item.option.title}
-            </h3>
+            <div className="flex flex-wrap items-center gap-2">
+              <h3 className="font-brand text-[1rem] font-semibold leading-tight text-travel-dark">
+                {item.option.title}
+              </h3>
+              {isBestSeller ? (
+                <span className="rounded-full bg-[#FBEAE8] px-3 py-1 font-interface text-[11px] font-semibold text-travel-primary">
+                  Best seller
+                </span>
+              ) : null}
+            </div>
             {!isSelected ? (
               <p className="mt-1 line-clamp-1 font-interface text-sm leading-6 text-travel-muted">
                 {item.option.description ?? activity.summary}
@@ -778,13 +844,6 @@ function InlinePackageOption({
           </div>
 
           <div className="flex flex-col justify-center gap-3 border-t border-[#2B2B2B]/14 p-4 sm:border-l sm:border-t-0 sm:p-5">
-            <PackagePriceSummary
-              displayCurrency={displayCurrency}
-              estimate={item.estimate}
-              totalTravelers={totalTravelers}
-              unitPrice={unitPrice}
-              large
-            />
             <ButtonCTA fullWidth href={checkoutHref} size="lg" variant="outline">
               Reserve Now & Pay Later
             </ButtonCTA>
