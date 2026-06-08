@@ -52,18 +52,18 @@ export function PublicSearchBar({ compact = false, placeholder = "Where are you 
       className={[
         "relative z-[70] flex w-full items-center gap-2 bg-white shadow-[0_18px_44px_rgba(0,0,0,0.22)]",
         compact
-          ? "h-11 max-w-[500px] rounded-full border border-travel-border px-4 shadow-[0_10px_26px_rgba(26,26,26,0.12)]"
+          ? "h-9 max-w-[420px] rounded-full border border-[#2B2B2B]/10 px-3 shadow-[0_8px_20px_rgba(26,26,26,0.08)]"
           : "max-w-3xl rounded-[14px] p-2"
       ].join(" ")}
       onSubmit={submitSearch}
     >
-      <Search className={`${compact ? "size-5" : "ml-4 size-5"} shrink-0 text-travel-muted`} />
+      <Search className={`${compact ? "size-4" : "ml-4 size-5"} shrink-0 text-travel-muted`} />
       <input
         aria-label="Search destinations, activities, regions, or categories"
         autoComplete="off"
         className={[
           "min-w-0 flex-1 bg-transparent font-interface text-travel-dark outline-none placeholder:text-travel-muted/75",
-          compact ? "text-[15px] font-normal" : "h-12 text-base font-medium"
+          compact ? "text-[13px] font-normal" : "h-12 text-base font-medium"
         ].join(" ")}
         onBlur={() => window.setTimeout(() => setIsFocused(false), 120)}
         onChange={(event) => setQuery(event.target.value)}
@@ -75,7 +75,7 @@ export function PublicSearchBar({ compact = false, placeholder = "Where are you 
       <button
         className={[
           "shrink-0 bg-travel-primary font-interface text-sm font-semibold text-white transition hover:bg-[#A51E14] active:bg-[#8F1A12]",
-          compact ? "h-9 rounded-full px-6" : "h-12 rounded-[11px] px-7"
+          compact ? "h-7 rounded-full px-4 text-xs" : "h-12 rounded-[11px] px-7"
         ].join(" ")}
         type="submit"
       >
@@ -91,7 +91,7 @@ export function PublicSearchBar({ compact = false, placeholder = "Where are you 
         >
           {results.slice(0, 6).map((result) => (
             <button
-              className="flex w-full items-center gap-3 px-4 py-3 text-left transition hover:bg-travel-bg"
+              className="flex w-full items-center gap-2.5 px-3 py-2 text-left transition hover:bg-travel-bg"
               key={`${result.type}-${result.href}-${result.label}`}
               onMouseDown={(event) => event.preventDefault()}
               onClick={() => goToResult(result)}
@@ -99,18 +99,18 @@ export function PublicSearchBar({ compact = false, placeholder = "Where are you 
             >
               <img
                 alt=""
-                className="size-12 shrink-0 rounded-[10px] object-cover"
+                className="size-9 shrink-0 rounded-[8px] object-cover"
                 src={result.imageUrl}
               />
               <span className="min-w-0 flex-1">
                 <span className="block truncate font-interface text-sm font-semibold text-travel-dark">
                   {result.label}
                 </span>
-                <span className="mt-0.5 block truncate font-interface text-xs text-travel-muted">
+                <span className="mt-0.5 block truncate font-interface text-[11px] text-travel-muted">
                   {result.meta}
                 </span>
               </span>
-              <span className="shrink-0 rounded-full bg-[#FBEAE8] px-2.5 py-1 font-interface text-[10px] font-semibold uppercase tracking-[0.06em] text-travel-primary">
+              <span className="shrink-0 rounded-full bg-[#FBEAE8] px-2 py-0.5 font-interface text-[9px] font-semibold uppercase tracking-[0.06em] text-travel-primary">
                 {result.type}
               </span>
             </button>

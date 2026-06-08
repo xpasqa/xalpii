@@ -1,11 +1,14 @@
 "use client";
 
+
+import { Heart, LogIn, ShoppingCart, WalletCards } from "lucide-react";
 import type { ReactNode } from "react";
 import { useEffect, useState } from "react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { routes } from "../../lib/routes";
 import { PublicSearchBar } from "../domain/public/PublicSearchBar";
+import { Dialog } from "../ui";
 import { useCurrency } from "../providers/CurrencyProvider";
 
 type PublicShellProps = {
@@ -14,6 +17,7 @@ type PublicShellProps = {
 
 export function PublicShell({ children }: PublicShellProps) {
   const [showSearch, setShowSearch] = useState(false);
+  const [currencyDialogOpen, setCurrencyDialogOpen] = useState(false);
   const pathname = usePathname();
   const isActivityDetail = pathname.startsWith("/activities/");
   const { currency, setCurrency, supportedCurrencies } = useCurrency();
@@ -51,69 +55,113 @@ export function PublicShell({ children }: PublicShellProps) {
             <>
               <nav
                 className={[
-                  "pointer-events-auto absolute left-1/2 hidden -translate-x-1/2 items-center gap-7 whitespace-nowrap font-interface text-[13px] font-normal text-travel-dark transition duration-300 md:flex",
+                  "pointer-events-auto absolute left-1/2 hidden -translate-x-1/2 items-center gap-7 whitespace-nowrap font-interface text-[13px] font-semibold text-travel-dark transition duration-300 md:flex",
                   showSearch ? "pointer-events-none -translate-y-1 opacity-0" : "translate-y-0 opacity-100"
                 ].join(" ")}
               >
-                <Link className="transition hover:text-travel-primary" href={routes.city("bali")}>
-                  Places to see
+                <Link className="border-b-2 border-transparent py-2 transition hover:border-travel-primary hover:text-travel-primary" href={routes.city("bali")}>
+                  Destinations
                 </Link>
                 <Link
-                  className="transition hover:text-travel-primary"
+                  className="border-b-2 border-transparent py-2 transition hover:border-travel-primary hover:text-travel-primary"
                   href={routes.activity("ubud-cooking-class-market-visit")}
                 >
-                  Things to do
+                  Activities
                 </Link>
-                <Link className="transition hover:text-travel-primary" href="/">
-                  Travel inspiration
+                <Link className="border-b-2 border-transparent py-2 transition hover:border-travel-primary hover:text-travel-primary" href="/">
+                  Inspiration
                 </Link>
-                <Link className="transition hover:text-travel-primary" href="/">
-                  About
-                </Link>
-                <Link className="transition hover:text-travel-primary" href="/">
-                  Promos
+                <Link className="border-b-2 border-transparent py-2 transition hover:border-travel-primary hover:text-travel-primary" href="/">
+                  Deals
                 </Link>
               </nav>
 
               <div
                 className={[
-                  "absolute left-[180px] hidden w-full max-w-[500px] transition duration-300 md:block",
+                  "absolute left-[156px] hidden w-full max-w-[420px] transition duration-300 md:block",
                   showSearch
                     ? "translate-y-0 opacity-100"
                     : "pointer-events-none translate-y-1 opacity-0"
                 ].join(" ")}
               >
-                <PublicSearchBar compact placeholder="Find places and things to do" />
+                <PublicSearchBar compact placeholder="Search experiences" />
               </div>
             </>
           )}
 
-          <nav className="ml-auto flex items-center gap-3 text-[13px] font-semibold text-travel-dark sm:gap-5">
-            <label className="relative">
-              <span className="sr-only">Display currency</span>
-              <select
-                aria-label="Display currency"
-                className="h-9 cursor-pointer rounded-travel-md border border-[#2B2B2B]/20 bg-white px-2.5 font-interface text-xs font-semibold text-travel-dark outline-none transition hover:border-travel-primary/40 focus:border-travel-primary focus:ring-2 focus:ring-travel-primary/15"
-                onChange={(event) => setCurrency(event.target.value as typeof currency)}
-                value={currency}
-              >
-                {supportedCurrencies.map((item) => (
-                  <option key={item} value={item}>
-                    {item}
-                  </option>
-                ))}
-              </select>
-            </label>
-            <Link className="hidden transition hover:text-travel-primary sm:inline" href={routes.login}>
-              Login
-            </Link>
-            <Link
-              className="rounded-full border border-[#2B2B2B]/20 px-4 py-2 transition hover:border-travel-primary/40 hover:text-travel-primary"
-              href={routes.partnerRegister}
+          <nav className="ml-auto flex items-center gap-3 text-travel-dark sm:gap-4">
+            <button
+              aria-label={`Change currency, currently ${currency}`}
+              className="flex min-w-[44px] flex-col items-center justify-center gap-0.5 text-travel-dark transition hover:text-travel-primary"
+              onClick={() => setCurrencyDialogOpen(true)}
+              type="button"
             >
-              Become a partner
+              <WalletCards className="size-5" />
+              <span className="font-interface text-[10px] font-semibold leading-none">{currency}</span>
+            </button>
+            <Link
+              aria-label="Login"
+              className="flex min-w-[44px] flex-col items-center justify-center gap-0.5 text-travel-dark transition hover:text-travel-primary"
+              href={routes.login}
+            >
+              <LogIn className="size-5" />
+              <span className="font-interface text-[10px] font-semibold leading-none">Login</span>
             </Link>
+            <button
+              aria-label="Wishlist"
+              className="flex min-w-[44px] flex-col items-center justify-center gap-0.5 text-travel-dark transition hover:text-travel-primary"
+              type="button"
+            >
+              <Heart className="size-5" />
+              <span className="font-interface text-[10px] font-semibold leading-none">Wishlist</span>
+            </button>
+            <button
+              aria-label="Cart"
+              className="relative flex min-w-[44px] flex-col items-center justify-center gap-0.5 text-travel-dark transition hover:text-travel-primary"
+              type="button"
+            >
+              <span className="relative">
+                <ShoppingCart className="size-5" />
+                <span className="absolute -right-1 -top-1 size-2 rounded-full bg-travel-primary" />
+              </span>
+              <span className="font-interface text-[10px] font-semibold leading-none">Cart</span>
+            </button>
           </nav>
+
+          <Dialog
+            bodyClassName="p-3 sm:p-3"
+            description="Choose the currency used for displaying prices."
+            onClose={() => setCurrencyDialogOpen(false)}
+            open={currencyDialogOpen}
+            panelClassName="max-w-sm"
+            title="Display currency"
+          >
+            <div className="grid gap-2">
+              {supportedCurrencies.map((item) => {
+                const isSelected = item === currency;
+
+                return (
+                  <button
+                    className={[
+                      "flex items-center justify-between rounded-travel-md px-4 py-3 text-left font-interface text-sm font-semibold transition",
+                      isSelected
+                        ? "bg-[#FBEAE8] text-travel-primary"
+                        : "text-travel-dark hover:bg-travel-bg"
+                    ].join(" ")}
+                    key={item}
+                    onClick={() => {
+                      setCurrency(item);
+                      setCurrencyDialogOpen(false);
+                    }}
+                    type="button"
+                  >
+                    <span>{item}</span>
+                    {isSelected ? <span className="text-xs uppercase tracking-[0.08em]">Selected</span> : null}
+                  </button>
+                );
+              })}
+            </div>
+          </Dialog>
         </div>
       </header>
       <div className="pt-[68px]">{children}</div>
@@ -132,9 +180,9 @@ function DetailPageNav() {
   ];
 
   return (
-    <nav className="absolute left-1/2 hidden -translate-x-1/2 items-center gap-8 whitespace-nowrap font-interface text-[13px] font-normal text-travel-dark md:flex">
+    <nav className="absolute left-1/2 hidden -translate-x-1/2 items-center gap-6 whitespace-nowrap font-interface text-[13px] font-semibold text-travel-dark md:flex">
       {items.map(([label, href]) => (
-        <a className="transition hover:text-travel-primary" href={href} key={href}>
+        <a className="border-b-2 border-transparent py-2 transition hover:border-travel-primary hover:text-travel-primary" href={href} key={href}>
           {label}
         </a>
       ))}

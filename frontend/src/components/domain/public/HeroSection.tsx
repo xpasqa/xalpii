@@ -5,7 +5,7 @@ import { PublicSearchBar } from "./PublicSearchBar";
 export function HeroSection() {
   return (
     <section className="relative z-40 bg-white">
-      <div className="relative min-h-[80vh] overflow-visible bg-black">
+      <div className="relative min-h-[72vh] overflow-visible bg-black">
         <img
           alt="Travelers exploring outdoors"
           className="absolute inset-0 size-full object-cover"
@@ -13,7 +13,7 @@ export function HeroSection() {
         />
         <div className="absolute inset-0 bg-black/20" />
         <div className="absolute inset-0 bg-gradient-to-b from-black/5 via-black/15 to-black/35" />
-        <div className="relative z-50 mx-auto flex min-h-[80vh] max-w-7xl flex-col items-center justify-center px-4 pb-16 pt-24 text-center sm:px-6 lg:px-8">
+        <div className="relative z-50 mx-auto flex min-h-[72vh] max-w-7xl flex-col items-center justify-center px-4 pb-16 pt-24 text-center sm:px-6 lg:px-8">
           <div className="mx-auto max-w-4xl pb-6 text-center text-white">
             <h1 className="whitespace-normal font-brand text-4xl font-bold leading-[1.12] text-white sm:text-5xl lg:whitespace-nowrap lg:text-[54px]">
               Experience More, Plan Less.
