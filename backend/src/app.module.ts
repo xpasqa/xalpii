@@ -8,6 +8,7 @@ import { HealthController } from "./health.controller";
 import { PartnerModule } from "./partner/partner.module";
 import { PrismaService } from "./prisma.service";
 import { PublicMarketplaceModule } from "./public/public-marketplace.module";
+import { ReviewsModule } from "./reviews/reviews.module";
 
 @Module({
   imports: [
@@ -20,7 +21,8 @@ import { PublicMarketplaceModule } from "./public/public-marketplace.module";
     BookingsModule,
     FilesModule,
     PartnerModule,
-    PublicMarketplaceModule
+    PublicMarketplaceModule,
+    ReviewsModule
   ],
   controllers: [HealthController],
   providers: [PrismaService]

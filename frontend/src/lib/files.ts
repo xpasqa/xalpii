@@ -6,6 +6,7 @@ export type FileUploadPurpose =
   | "CITY_IMAGE"
   | "CATEGORY_IMAGE"
   | "ACTIVITY_IMAGE"
+  | "REVIEW_IMAGE"
   | "PARTNER_DOCUMENT"
   | "PROFILE_IMAGE";
 

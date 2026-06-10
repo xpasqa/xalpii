@@ -82,6 +82,7 @@ enum PayoutStatus {
 enum PricingMode {
   SIMPLE
   GROUP_TIER
+  TIERED
 }
 
 enum ParticipantType {
@@ -110,6 +111,20 @@ enum ActivityRevisionStatus {
   CANCELLED
 }
 
+enum ReviewStatus {
+  PENDING_REVIEW
+  APPROVED
+  REJECTED
+  HIDDEN
+}
+
+enum ReviewMediaStatus {
+  PENDING
+  APPROVED
+  REJECTED
+  HIDDEN
+}
+
 model User {
   id           String     @id @default(uuid()) @db.Uuid
   email        String     @unique
@@ -123,6 +138,7 @@ model User {
   partner                   Partner?
   bookings                  Booking[]
   reviews                   Review[]
+  approvedReviews           Review[]           @relation("ReviewApprover")
   uploadedFiles             FileAsset[]        @relation("UploadedFiles")
   auditLogEvents            AuditLog[]         @relation("AuditLogActor")
   reviewedActivityRevisions ActivityRevision[] @relation("ActivityRevisionReviewer")
@@ -355,6 +371,7 @@ model ActivityOption {
   availability    ActivityAvailability[]
   dateInventories ActivityOptionDateInventory[]
   bookings        Booking[]
+  reviews         Review[]
 
   @@unique([activityId, slug])
   @@index([activityId, isActive])
@@ -435,6 +452,7 @@ model FileAsset {
   uploadedBy    User?           @relation("UploadedFiles", fields: [uploadedById], references: [id], onDelete: SetNull)
   cityImages    City[]          @relation("CityImage")
   activityMedia ActivityMedia[] @relation("ActivityMediaFile")
+  reviewMedia   ReviewMedia[]   @relation("ReviewMediaFile")
 
   @@unique([bucket, objectKey])
   @@index([uploadedById])
@@ -464,7 +482,7 @@ model Booking {
   participants BookingParticipant[]
   payment      Payment?
   voucher      Voucher?
-  reviews      Review[]
+  review       Review?
 
   @@index([userId, status])
   @@index([activityId])
@@ -519,23 +537,55 @@ model Voucher {
 }
 
 model Review {
-  id          String   @id @default(uuid()) @db.Uuid
-  userId      String   @map("user_id") @db.Uuid
-  activityId  String   @map("activity_id") @db.Uuid
-  bookingId   String?  @map("booking_id") @db.Uuid
-  rating      Int
-  title       String?
-  comment     String?
-  isPublished Boolean  @default(false) @map("is_published")
-  createdAt   DateTime @default(now()) @map("created_at")
-  updatedAt   DateTime @updatedAt @map("updated_at")
+  id                 String       @id @default(uuid()) @db.Uuid
+  userId             String       @map("user_id") @db.Uuid
+  activityId         String       @map("activity_id") @db.Uuid
+  bookingId          String?      @unique @map("booking_id") @db.Uuid
+  optionId           String?      @map("option_id") @db.Uuid
+  rating             Int
+  title              String?
+  comment            String
+  status             ReviewStatus @default(PENDING_REVIEW)
+  isFeatured         Boolean      @default(false) @map("is_featured")
+  adminEditedTitle   String?      @map("admin_edited_title")
+  adminEditedComment String?      @map("admin_edited_comment")
+  moderationNote     String?      @map("moderation_note")
+  submittedAt        DateTime     @default(now()) @map("submitted_at")
+  approvedAt         DateTime?    @map("approved_at")
+  approvedById       String?      @map("approved_by_id") @db.Uuid
+  rejectedAt         DateTime?    @map("rejected_at")
+  hiddenAt           DateTime?    @map("hidden_at")
+  createdAt          DateTime     @default(now()) @map("created_at")
+  updatedAt          DateTime     @updatedAt @map("updated_at")
 
-  user     User     @relation(fields: [userId], references: [id], onDelete: Cascade)
-  activity Activity @relation(fields: [activityId], references: [id], onDelete: Cascade)
-  booking  Booking? @relation(fields: [bookingId], references: [id], onDelete: SetNull)
+  user       User            @relation(fields: [userId], references: [id], onDelete: Cascade)
+  activity   Activity        @relation(fields: [activityId], references: [id], onDelete: Cascade)
+  booking    Booking?        @relation(fields: [bookingId], references: [id], onDelete: Cascade)
+  option     ActivityOption? @relation(fields: [optionId], references: [id], onDelete: SetNull)
+  approvedBy User?           @relation("ReviewApprover", fields: [approvedById], references: [id], onDelete: SetNull)
+  media      ReviewMedia[]
 
-  @@index([activityId, isPublished])
+  @@index([activityId, status, isFeatured])
+  @@index([userId, status])
   @@map("reviews")
+}
+
+model ReviewMedia {
+  id        String            @id @default(uuid()) @db.Uuid
+  reviewId  String            @map("review_id") @db.Uuid
+  fileId    String?           @map("file_id") @db.Uuid
+  url       String?
+  altText   String?           @map("alt_text")
+  sortOrder Int               @default(0) @map("sort_order")
+  status    ReviewMediaStatus @default(PENDING)
+  createdAt DateTime          @default(now()) @map("created_at")
+  updatedAt DateTime          @updatedAt @map("updated_at")
+
+  review Review     @relation(fields: [reviewId], references: [id], onDelete: Cascade)
+  file   FileAsset? @relation("ReviewMediaFile", fields: [fileId], references: [id], onDelete: SetNull)
+
+  @@index([reviewId, status, sortOrder])
+  @@map("review_media")
 }
 
 model Payout {

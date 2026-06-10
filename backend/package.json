@@ -15,7 +15,10 @@
     "start:dev": "nest start --watch",
     "import:tokyo": "tsx prisma/importers/import-tokyo.ts",
     "import:paris": "tsx prisma/importers/import-paris.ts",
-    "import:zurich": "tsx prisma/importers/import-zurich.ts"
+    "import:zurich": "tsx prisma/importers/import-zurich.ts",
+    "import:packages": "tsx prisma/importers/import-packages.ts",
+    "import:vendors": "tsx prisma/importers/import-vendors.ts",
+    "import:packages:1-4": "tsx prisma/importers/import-packages-1-4.ts"
   },
   "prisma": {
     "seed": "ts-node prisma/seed.ts"
@@ -29,6 +32,7 @@
     "@nestjs/platform-express": "^10.4.15",
     "@prisma/client": "^6.8.2",
     "bcrypt": "^6.0.0",
+    "bcryptjs": "^3.0.3",
     "class-transformer": "^0.5.1",
     "class-validator": "^0.14.1",
     "minio": "^8.0.7",
