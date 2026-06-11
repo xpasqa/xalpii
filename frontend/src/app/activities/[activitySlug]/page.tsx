@@ -7,6 +7,7 @@ import {
   ActivityDetailGallery,
   ActivityIntro,
   ActivityItinerarySection,
+  ActivityReviewsSection,
   SiteFooter
 } from "../../../components/domain/public";
 import { PublicShell } from "../../../components/layout";
@@ -55,6 +56,7 @@ export default async function ActivityPage({ params }: ActivityPageProps) {
             <AboutActivitySection activity={activity} />
             <ActivityItinerarySection activity={activity} />
             <ActivityContentSections activity={activity} />
+            <ActivityReviewsSection activitySlug={activity.slug} />
           </div>
           <aside className="pointer-events-none fixed bottom-8 right-[max(2rem,calc((100vw-80rem)/2+2rem))] top-[88px] z-30 hidden w-[380px] lg:block">
             <div className="pointer-events-auto h-full overflow-y-auto overscroll-contain pb-4">

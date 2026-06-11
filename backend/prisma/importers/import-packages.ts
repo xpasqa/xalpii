@@ -6,6 +6,11 @@ import {
   PricingMode,
   PrismaClient,
 } from "@prisma/client";
+import {
+  createVerifiedDemoReview,
+  recalculateSeededActivityRating,
+  verifiedReviewVoucherCode
+} from "../helpers/verified-review";
 
 const prisma = new PrismaClient();
 
@@ -141,7 +146,7 @@ async function main() {
   });
 
   if (existingActivity) {
-    await prisma.review.deleteMany({
+    await prisma.booking.deleteMany({
       where: {
         activityId: existingActivity.id,
       },
@@ -546,37 +551,46 @@ async function main() {
     }
   }
 
-  await prisma.review.createMany({
-    data: [
-      {
-        userId: adminUser.id,
-        activityId: activity.id,
-        rating: 5,
-        title: "Very smooth Tokyo experience",
-        comment:
-          "The route felt local but still covered the important highlights. Very easy and enjoyable.",
-        status: "APPROVED",
-      },
-      {
-        userId: adminUser.id,
-        activityId: activity.id,
-        rating: 5,
-        title: "Perfect for first time Tokyo",
-        comment:
-          "We did not have to think too much. The guide helped us enjoy the city with zero stress.",
-        status: "APPROVED",
-      },
-      {
-        userId: adminUser.id,
-        activityId: activity.id,
-        rating: 4,
-        title: "Great balance",
-        comment:
-          "Good mix between culture, food, and city highlights. The itinerary was flexible.",
-        status: "APPROVED",
-      },
-    ],
-  });
+  const reviews = [
+    {
+      rating: 5,
+      title: "Very smooth Tokyo experience",
+      comment:
+        "The route felt local but still covered the important highlights. Very easy and enjoyable.",
+      featured: true
+    },
+    {
+      rating: 5,
+      title: "Perfect for first time Tokyo",
+      comment:
+        "We did not have to think too much. The guide helped us enjoy the city with zero stress.",
+      featured: true
+    },
+    {
+      rating: 4,
+      title: "Great balance",
+      comment:
+        "Good mix between culture, food, and city highlights. The itinerary was flexible.",
+      featured: false
+    }
+  ];
+
+  for (const [index, review] of reviews.entries()) {
+    await createVerifiedDemoReview(prisma, {
+      activityId: activity.id,
+      approvedById: adminUser.id,
+      comment: review.comment,
+      featured: review.featured,
+      optionId: standardOption.id,
+      rating: review.rating,
+      title: review.title,
+      totalAmountCents: 18000,
+      userId: adminUser.id,
+      voucherCode: verifiedReviewVoucherCode(activity.slug, index)
+    });
+  }
+
+  await recalculateSeededActivityRating(prisma, activity.id);
 
   console.log("Imported package:", activity.title);
   console.log("Done.");

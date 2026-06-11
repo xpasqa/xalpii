@@ -38,7 +38,9 @@ import { calculatePricingEstimate, remainingCapacity } from "../../../lib/activi
 import { getPublicActivity, mapPublicActivity } from "../../../lib/public-marketplace";
 import type { PublicActivity } from "../../../lib/public-marketplace";
 import { routes } from "../../../lib/routes";
+import { getMyReviews, type UserReview } from "../../../lib/reviews";
 import { useCurrency } from "../../providers/CurrencyProvider";
+import { UserReviewCard } from "../reviews/UserReviewCard";
 
 type CheckoutManagerProps = {
   activitySlug: string;
@@ -461,13 +463,16 @@ function formatAvailableDays(availableDays: string[]) {
 
 export function UserBookingsManager() {
   const [bookings, setBookings] = useState<Booking[]>([]);
+  const [reviews, setReviews] = useState<UserReview[]>([]);
   const [error, setError] = useState<string | null>(null);
   const [isLoading, setIsLoading] = useState(true);
 
   useEffect(() => {
     async function load() {
       try {
-        setBookings(await getMyBookings());
+        const [nextBookings, nextReviews] = await Promise.all([getMyBookings(), getMyReviews()]);
+        setBookings(nextBookings);
+        setReviews(nextReviews);
       } catch (caughtError) {
         setError(caughtError instanceof Error ? caughtError.message : "Unable to load bookings");
       } finally {
@@ -478,19 +483,34 @@ export function UserBookingsManager() {
     void load();
   }, []);
 
-  return <BookingTable title="My bookings" description="Your confirmed and pending Alpii bookings." bookings={bookings} error={error} isLoading={isLoading} useDisplayCurrency />;
+  const reviewByBookingId = new Map(reviews.map((review) => [review.bookingId, review]));
+
+  return (
+    <BookingTable
+      title="My bookings"
+      description="Your confirmed and pending Alpii bookings."
+      bookings={bookings}
+      error={error}
+      isLoading={isLoading}
+      reviewByBookingId={reviewByBookingId}
+      useDisplayCurrency
+    />
+  );
 }
 
 export function UserBookingDetailManager({ bookingId }: { bookingId: string }) {
   const { currency: displayCurrency } = useCurrency();
   const [booking, setBooking] = useState<Booking | null>(null);
+  const [review, setReview] = useState<UserReview | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [isLoading, setIsLoading] = useState(true);
 
   useEffect(() => {
     async function load() {
       try {
-        setBooking(await getBooking(bookingId));
+        const [nextBooking, reviews] = await Promise.all([getBooking(bookingId), getMyReviews()]);
+        setBooking(nextBooking);
+        setReview(reviews.find((item) => item.bookingId === bookingId) ?? null);
       } catch (caughtError) {
         setError(caughtError instanceof Error ? caughtError.message : "Unable to load booking");
       } finally {
@@ -540,6 +560,13 @@ export function UserBookingDetailManager({ bookingId }: { bookingId: string }) {
             )}
           </CardContent>
         </Card>
+        {booking.status === "COMPLETED" ? (
+          <UserReviewCard
+            bookingId={booking.id}
+            existingReview={review}
+            onSubmitted={setReview}
+          />
+        ) : null}
       </div>
       <aside>
         <Card>
@@ -735,6 +762,7 @@ function BookingTable({
   search,
   setSearch,
   showCustomer = false,
+  reviewByBookingId,
   useDisplayCurrency = false,
   title
 }: {
@@ -746,6 +774,7 @@ function BookingTable({
   search?: string;
   setSearch?: (value: string) => void;
   showCustomer?: boolean;
+  reviewByBookingId?: Map<string, UserReview>;
   useDisplayCurrency?: boolean;
   title: string;
 }) {
@@ -777,6 +806,26 @@ function BookingTable({
             : formatBaseUsd(booking.totalAmountCents)
       },
       { key: "created", header: "Booked", cell: (booking: Booking) => formatDate(booking.createdAt) },
+      ...(reviewByBookingId
+        ? [
+            {
+              key: "review",
+              header: "Review",
+              cell: (booking: Booking) => {
+                const review = reviewByBookingId.get(booking.id);
+                if (review) return <ReviewStatusBadge status={review.status} />;
+                if (booking.status === "COMPLETED") {
+                  return (
+                    <Link className="font-semibold text-travel-primary" href={routes.bookingDetail(booking.id)}>
+                      Write review
+                    </Link>
+                  );
+                }
+                return <span className="text-travel-muted">Not available</span>;
+              }
+            }
+          ]
+        : []),
       {
         key: "actions",
         header: "Actions",
@@ -788,7 +837,7 @@ function BookingTable({
         )
       }
     ],
-    [displayCurrency, showCustomer, useDisplayCurrency]
+    [displayCurrency, reviewByBookingId, showCustomer, useDisplayCurrency]
   );
 
   return (
@@ -857,6 +906,12 @@ function PaymentStatusBadge({ status }: { status: BookingPayment["status"] }) {
 
 function VoucherStatusBadge({ status }: { status: string }) {
   const variant = status === "ACTIVE" ? "success" : status === "USED" ? "info" : "danger";
+  return <Badge variant={variant}>{formatStatus(status)}</Badge>;
+}
+
+function ReviewStatusBadge({ status }: { status: UserReview["status"] }) {
+  const variant =
+    status === "APPROVED" ? "success" : status === "PENDING_REVIEW" ? "warning" : "danger";
   return <Badge variant={variant}>{formatStatus(status)}</Badge>;
 }
 

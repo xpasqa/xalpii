@@ -5,6 +5,11 @@ import {
   PricingMode,
   PrismaClient,
 } from "@prisma/client";
+import {
+  createVerifiedDemoReview,
+  recalculateSeededActivityRating,
+  verifiedReviewVoucherCode
+} from "../helpers/verified-review";
 
 const prisma = new PrismaClient();
 
@@ -484,7 +489,7 @@ async function clearActivityChildren(activityId: string) {
 
   const optionIds = existingOptions.map((option) => option.id);
 
-  await prisma.review.deleteMany({
+  await prisma.booking.deleteMany({
     where: { activityId },
   });
 
@@ -683,6 +688,7 @@ async function importPackage(input: PackageInput, partnerId: string, reviewUserI
   });
 
   const today = new Date();
+  const createdOptions: Array<{ id: string; isDefault: boolean }> = [];
 
   for (const optionInput of input.options) {
     const option = await prisma.activityOption.create({
@@ -701,6 +707,7 @@ async function importPackage(input: PackageInput, partnerId: string, reviewUserI
         sortOrder: optionInput.sortOrder,
       },
     });
+    createdOptions.push({ id: option.id, isDefault: option.isDefault });
 
     await prisma.activityOptionPricingTier.createMany({
       data: optionInput.pricingTiers.map((tier) => ({
@@ -752,16 +759,27 @@ async function importPackage(input: PackageInput, partnerId: string, reviewUserI
     }
   }
 
-  await prisma.review.createMany({
-    data: input.reviews.map((review) => ({
-      userId: reviewUserId,
+  const defaultOption =
+    createdOptions.find((option) => option.isDefault) ?? createdOptions[0];
+  if (!defaultOption) {
+    throw new Error(`No option was created for ${input.slug}`);
+  }
+
+  for (const [index, review] of input.reviews.entries()) {
+    await createVerifiedDemoReview(prisma, {
       activityId: activity.id,
+      comment: review.comment,
+      featured: index < 2,
+      optionId: defaultOption.id,
       rating: review.rating,
       title: review.title,
-      comment: review.comment,
-      status: "APPROVED",
-    })),
-  });
+      totalAmountCents: input.basePriceCents,
+      userId: reviewUserId,
+      voucherCode: verifiedReviewVoucherCode(input.slug, index)
+    });
+  }
+
+  await recalculateSeededActivityRating(prisma, activity.id);
 
   console.log(`Imported package: ${activity.title}`);
 }

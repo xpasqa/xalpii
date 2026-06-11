@@ -17,6 +17,7 @@ import {
   ScanLine,
   Settings,
   Shapes,
+  Star,
   User,
   Users
 } from "lucide-react";
@@ -208,6 +209,7 @@ function dashboardNavForRole(role: UserRole) {
       { disabled: true, icon: Users, label: "Partners" },
       { href: routes.adminBookings, icon: BookOpen, label: "Bookings" },
       { href: routes.adminPayments, icon: CircleDollarSign, label: "Payments" },
+      { href: routes.adminReviews, icon: Star, label: "Reviews" },
       { disabled: true, icon: Settings, label: "Settings" }
     ];
   }

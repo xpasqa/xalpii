@@ -10,6 +10,11 @@ import {
   UserStatus
 } from "@prisma/client";
 import * as bcrypt from "bcrypt";
+import {
+  createVerifiedDemoReview,
+  recalculateSeededActivityRating,
+  verifiedReviewVoucherCode
+} from "./helpers/verified-review";
 
 const prisma = new PrismaClient();
 
@@ -298,7 +303,7 @@ async function main() {
     }
   });
 
-  await prisma.user.upsert({
+  const demoUser = await prisma.user.upsert({
     where: { email: "user@alpii.local" },
     update: {
       fullName: "Alpii Demo User",
@@ -314,6 +319,20 @@ async function main() {
       status: UserStatus.ACTIVE
     }
   });
+
+  const reviewUsers = [
+    demoUser,
+    await upsertDemoReviewer(
+      "reviewer.ayu@alpii.local",
+      "Ayu Pradana",
+      demoPasswordHash
+    ),
+    await upsertDemoReviewer(
+      "reviewer.daniel@alpii.local",
+      "Daniel Hartono",
+      demoPasswordHash
+    )
+  ];
 
   const partner = await prisma.partner.upsert({
     where: { userId: partnerUser.id },
@@ -382,8 +401,8 @@ async function main() {
         notIncluded: activity.notIncluded,
         highlights: activity.highlights,
         itinerary: activity.itinerary as Prisma.InputJsonValue,
-        ratingAverage: new Prisma.Decimal(activity.ratingAverage),
-        reviewCount: activity.reviewCount,
+        ratingAverage: new Prisma.Decimal(0),
+        reviewCount: 0,
         publishedAt: new Date(),
         pricingMode: PricingMode.GROUP_TIER
       },
@@ -405,8 +424,8 @@ async function main() {
         notIncluded: activity.notIncluded,
         highlights: activity.highlights,
         itinerary: activity.itinerary as Prisma.InputJsonValue,
-        ratingAverage: new Prisma.Decimal(activity.ratingAverage),
-        reviewCount: activity.reviewCount,
+        ratingAverage: new Prisma.Decimal(0),
+        reviewCount: 0,
         publishedAt: new Date(),
         pricingMode: PricingMode.GROUP_TIER
       }
@@ -449,6 +468,7 @@ async function main() {
     });
 
     const optionSeeds = buildOptionSeeds(activity);
+    const createdOptions: Array<{ id: string; isDefault: boolean }> = [];
     for (const optionSeed of optionSeeds) {
       const option = await prisma.activityOption.create({
         data: {
@@ -466,6 +486,7 @@ async function main() {
           title: optionSeed.title
         }
       });
+      createdOptions.push({ id: option.id, isDefault: option.isDefault });
 
       await prisma.activityOptionPricingTier.createMany({
         data: buildPricingTiers(optionSeed.tierMultiplier ?? 1).map((tier) => ({
@@ -496,6 +517,53 @@ async function main() {
         });
       }
     }
+
+    const defaultOption =
+      createdOptions.find((option) => option.isDefault) ?? createdOptions[0];
+    if (!defaultOption) {
+      throw new Error(`No activity option was created for ${activity.slug}`);
+    }
+
+    const demoReviews = [
+      {
+        rating: 5,
+        title: "A smooth island day",
+        comment:
+          "The transfers, guide coordination, and island route were handled clearly. We could focus on enjoying the viewpoints instead of worrying about logistics.",
+        featured: true
+      },
+      {
+        rating: 5,
+        title: "Well organized from start to finish",
+        comment:
+          "Pickup was on time and the day moved at a comfortable pace. Lunch and the return boat were coordinated well, which made the experience feel reliable.",
+        featured: true
+      },
+      {
+        rating: 4,
+        title: "Beautiful stops and helpful guide",
+        comment:
+          "The main viewpoints were memorable and our guide gave useful context throughout the day. It was a full schedule, but the organization made it manageable.",
+        featured: false
+      }
+    ];
+
+    for (const [index, review] of demoReviews.entries()) {
+      await createVerifiedDemoReview(prisma, {
+        activityId: savedActivity.id,
+        approvedById: adminUser.id,
+        comment: review.comment,
+        featured: review.featured,
+        optionId: defaultOption.id,
+        rating: review.rating,
+        title: review.title,
+        totalAmountCents: activity.priceCents,
+        userId: reviewUsers[index].id,
+        voucherCode: verifiedReviewVoucherCode(activity.slug, index)
+      });
+    }
+
+    await recalculateSeededActivityRating(prisma, savedActivity.id);
   }
 
   await prisma.auditLog.create({
@@ -504,11 +572,34 @@ async function main() {
       action: "SEED_DATABASE",
       entityType: "database",
       metadata: {
-        users: 3,
+        users: 5,
         cities: cities.length,
         categories: categories.length,
         activities: activities.length
       }
+    }
+  });
+}
+
+async function upsertDemoReviewer(
+  email: string,
+  fullName: string,
+  passwordHash: string
+) {
+  return prisma.user.upsert({
+    where: { email },
+    update: {
+      fullName,
+      passwordHash,
+      role: UserRole.USER,
+      status: UserStatus.ACTIVE
+    },
+    create: {
+      email,
+      fullName,
+      passwordHash,
+      role: UserRole.USER,
+      status: UserStatus.ACTIVE
     }
   });
 }

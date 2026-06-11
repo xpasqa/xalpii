@@ -31,6 +31,7 @@ export const routes = {
     `/dashboard/admin/activity-revisions/${revisionId}`,
   adminBookings: "/dashboard/admin/bookings",
   adminPayments: "/dashboard/admin/payments",
+  adminReviews: "/dashboard/admin/reviews",
   city: (citySlug: string) => `/things-to-do/${citySlug}`,
   activity: (activitySlug: string) => `/activities/${activitySlug}`,
   checkout: (activitySlug: string) => `/checkout/${activitySlug}`

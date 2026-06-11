@@ -60,28 +60,39 @@ export class ReviewsService {
       }
     }
 
-    const review = await this.prisma.review.create({
-      data: {
-        activityId: booking.activityId,
-        bookingId: booking.id,
-        comment: dto.comment.trim(),
-        optionId: booking.optionId,
-        rating: dto.rating,
-        status: ReviewStatus.PENDING_REVIEW,
-        title: dto.title?.trim() || null,
-        userId: user.id,
-        media: {
-          create: (dto.media ?? []).map((item, index) => ({
-            altText: item.altText?.trim() || null,
-            fileId: item.fileId,
-            sortOrder: item.sortOrder ?? index,
-            status: ReviewMediaStatus.PENDING,
-            url: item.url?.trim() || null
-          }))
-        }
-      },
-      include: reviewInclude
-    });
+    let review;
+    try {
+      review = await this.prisma.review.create({
+        data: {
+          activityId: booking.activityId,
+          bookingId: booking.id,
+          comment: dto.comment.trim(),
+          optionId: booking.optionId,
+          rating: dto.rating,
+          status: ReviewStatus.PENDING_REVIEW,
+          title: dto.title?.trim() || null,
+          userId: user.id,
+          media: {
+            create: (dto.media ?? []).map((item, index) => ({
+              altText: item.altText?.trim() || null,
+              fileId: item.fileId,
+              sortOrder: item.sortOrder ?? index,
+              status: ReviewMediaStatus.PENDING,
+              url: item.url?.trim() || null
+            }))
+          }
+        },
+        include: reviewInclude
+      });
+    } catch (error) {
+      if (error instanceof Prisma.PrismaClientKnownRequestError && error.code === "P2002") {
+        throw new BadRequestException({
+          code: "REVIEW_ALREADY_EXISTS",
+          message: "This booking already has a review"
+        });
+      }
+      throw error;
+    }
 
     return { review, message: "Your review has been submitted and will appear after moderation." };
   }
@@ -166,10 +177,14 @@ export class ReviewsService {
       if (status === ReviewStatus.APPROVED) {
         data.approvedAt = new Date();
         data.approvedBy = { connect: { id: admin.id } };
+        data.hiddenAt = null;
+        data.rejectedAt = null;
       } else {
         data.isFeatured = false;
-        if (status === ReviewStatus.REJECTED) data.rejectedAt = new Date();
-        if (status === ReviewStatus.HIDDEN) data.hiddenAt = new Date();
+        data.approvedAt = null;
+        data.approvedBy = { disconnect: true };
+        data.hiddenAt = status === ReviewStatus.HIDDEN ? new Date() : null;
+        data.rejectedAt = status === ReviewStatus.REJECTED ? new Date() : null;
       }
     }
     const updated = await this.prisma.$transaction(async (tx) => {
