@@ -4,7 +4,7 @@ import { VoucherValidationManager } from "../../../../components/domain/bookings
 export default function PartnerVouchersPage() {
   return (
     <ProtectedDashboardPage
-      allowedRoles={["PARTNER"]}
+      allowedRoles={["PARTNER", "ADMIN", "SUPER_ADMIN"]}
       description="Validate traveler vouchers when guests arrive for an activity."
       title="Validate voucher"
     >

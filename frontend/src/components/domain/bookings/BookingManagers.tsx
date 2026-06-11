@@ -1,10 +1,23 @@
 "use client";
 
-import type { FormEvent } from "react";
+import type { FormEvent, ReactNode } from "react";
 import { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { ArrowLeft, CheckCircle2, CreditCard, QrCode, Search } from "lucide-react";
+import {
+  ArrowLeft,
+  ChevronDown,
+  Clock3,
+  CreditCard,
+  LockKeyhole,
+  MapPin,
+  QrCode,
+  Search,
+  Tag,
+  UserRound,
+  CalendarDays,
+  CheckCircle2
+} from "lucide-react";
 import {
   Badge,
   ButtonCTA,
@@ -14,13 +27,16 @@ import {
   CardHeader,
   CardTitle,
   DataTable,
+  Dialog,
   EmptyState,
   ErrorState,
   Input,
   LoadingState,
   Select
 } from "../../ui";
-import { getAccessToken } from "../../../lib/auth";
+import { getAccessToken, getMe, register, saveAccessToken } from "../../../lib/auth";
+import type { AuthUser } from "../../../lib/auth";
+import { ApiFetchError } from "../../../lib/api";
 import {
   confirmDummyPayment,
   createBooking,
@@ -41,6 +57,7 @@ import { routes } from "../../../lib/routes";
 import { getMyReviews, type UserReview } from "../../../lib/reviews";
 import { useCurrency } from "../../providers/CurrencyProvider";
 import { UserReviewCard } from "../reviews/UserReviewCard";
+import { Textarea } from "../../ui/textarea";
 
 type CheckoutManagerProps = {
   activitySlug: string;
@@ -49,6 +66,12 @@ type CheckoutManagerProps = {
   initialChildren?: string;
   initialOptionId?: string;
   initialSelectedDate?: string;
+};
+
+type TravelerDetail = {
+  firstName: string;
+  lastName: string;
+  type: "Adult" | "Child";
 };
 
 export function CheckoutManager({
@@ -60,17 +83,53 @@ export function CheckoutManager({
   initialSelectedDate
 }: CheckoutManagerProps) {
   const router = useRouter();
-  const { currency: displayCurrency } = useCurrency();
+  const {
+    currency: displayCurrency,
+    setCurrency: setDisplayCurrency,
+    supportedCurrencies
+  } = useCurrency();
   const [activity, setActivity] = useState<PublicActivity | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [isCreating, setIsCreating] = useState(false);
   const [booking, setBooking] = useState<Booking | null>(null);
+  const [activeStep, setActiveStep] = useState<1 | 2 | 3>(1);
+  const [authPrompt, setAuthPrompt] = useState(false);
+  const [holdSeconds, setHoldSeconds] = useState(30 * 60);
   const [optionId, setOptionId] = useState(initialOptionId ?? "");
   const [availabilityId, setAvailabilityId] = useState("");
   const [selectedDate, setSelectedDate] = useState(initialSelectedDate ?? todayInputValue());
   const [adults, setAdults] = useState(() => clampQuantity(initialAdults, 1, 14, 1));
   const [children, setChildren] = useState(() => clampQuantity(initialChildren, 0, 14, 0));
+  const [contact, setContact] = useState({
+    fullName: "",
+    email: "",
+    phone: "",
+    password: ""
+  });
+  const [currentUser, setCurrentUser] = useState<AuthUser | null>(null);
+  const [isAuthSubmitting, setIsAuthSubmitting] = useState(false);
+  const [travelers, setTravelers] = useState<TravelerDetail[]>([]);
+  const [pickupPreference, setPickupPreference] = useState<"pickup" | "later">("later");
+  const [pickupAddress, setPickupAddress] = useState("");
+  const [specialRequirements, setSpecialRequirements] = useState("");
+  const [promoOpen, setPromoOpen] = useState(false);
+  const [promoCode, setPromoCode] = useState("");
+  const [currencyDialogOpen, setCurrencyDialogOpen] = useState(false);
+  const [paymentTiming, setPaymentTiming] = useState<"pay_now" | "pay_later">("pay_now");
+  const [paymentMethod, setPaymentMethod] = useState<"card" | null>("card");
+  const draftStorageKey = useMemo(
+    () =>
+      [
+        "checkout-draft",
+        activitySlug,
+        optionId || "no-option",
+        availabilityId || selectedDate || "no-date",
+        adults,
+        children
+      ].join(":"),
+    [activitySlug, adults, availabilityId, children, optionId, selectedDate]
+  );
 
   useEffect(() => {
     async function loadActivity() {
@@ -98,6 +157,111 @@ export function CheckoutManager({
 
     void loadActivity();
   }, [activitySlug, initialAvailabilityId, initialOptionId, initialSelectedDate]);
+
+  useEffect(() => {
+    const token = getAccessToken();
+    if (!token) return;
+
+    async function prefillUser() {
+      try {
+        const { user } = await getMe();
+        setCurrentUser(user);
+        setAuthPrompt(false);
+        setContact((current) => ({
+          ...current,
+          fullName: current.fullName || user.fullName,
+          email: current.email || user.email
+        }));
+      } catch {
+        // Checkout remains usable as guest UI if the stored token is stale.
+      }
+    }
+
+    void prefillUser();
+  }, []);
+
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+
+    const rawDraft = window.localStorage.getItem(draftStorageKey);
+    if (!rawDraft) return;
+
+    try {
+      const draft = JSON.parse(rawDraft) as Partial<{
+        activeStep: 1 | 2 | 3;
+        email: string;
+        fullName: string;
+        phone: string;
+        pickupAddress: string;
+        pickupPreference: "pickup" | "later";
+        specialRequirements: string;
+        travelers: TravelerDetail[];
+      }>;
+
+      setContact((current) => ({
+        ...current,
+        fullName: current.fullName || draft.fullName || "",
+        email: current.email || draft.email || "",
+        phone: current.phone || draft.phone || ""
+      }));
+      setPickupPreference(draft.pickupPreference ?? "later");
+      setPickupAddress(draft.pickupAddress ?? "");
+      setSpecialRequirements(draft.specialRequirements ?? "");
+      if (draft.travelers?.length) {
+        setTravelers(draft.travelers);
+      }
+      setActiveStep(getAccessToken() ? draft.activeStep ?? 1 : 1);
+    } catch {
+      // Ignore malformed drafts.
+    }
+  }, [draftStorageKey]);
+
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+
+    window.localStorage.setItem(
+      draftStorageKey,
+      JSON.stringify({
+        activeStep,
+        email: contact.email,
+        fullName: contact.fullName,
+        phone: contact.phone,
+        pickupAddress,
+        pickupPreference,
+        specialRequirements,
+        travelers
+      })
+    );
+  }, [activeStep, contact.email, contact.fullName, contact.phone, draftStorageKey, pickupAddress, pickupPreference, specialRequirements, travelers]);
+
+  useEffect(() => {
+    const interval = window.setInterval(() => {
+      setHoldSeconds((seconds) => Math.max(0, seconds - 1));
+    }, 1000);
+
+    return () => window.clearInterval(interval);
+  }, []);
+
+  useEffect(() => {
+    const nextTravelers: TravelerDetail[] = [];
+    for (let index = 0; index < adults; index += 1) {
+      nextTravelers.push({
+        type: "Adult",
+        firstName: travelers[index]?.firstName ?? "",
+        lastName: travelers[index]?.lastName ?? ""
+      });
+    }
+    for (let index = 0; index < children; index += 1) {
+      const existing = travelers[adults + index];
+      nextTravelers.push({
+        type: "Child",
+        firstName: existing?.firstName ?? "",
+        lastName: existing?.lastName ?? ""
+      });
+    }
+    setTravelers(nextTravelers);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [adults, children]);
 
   const pricing = activity?.pricing?.find((item) => item.isActive) ?? activity?.pricing?.[0];
   const mappedActivity = activity ? mapPublicActivity(activity) : null;
@@ -131,9 +295,74 @@ export function CheckoutManager({
     ...(selectedOption ? { optionId: selectedOption.id } : {}),
     ...(isAlwaysAvailable ? { selectedDate } : availabilityId ? { availabilityId } : {})
   }).toString()}`;
+  const isAuthenticated = Boolean(currentUser && getAccessToken());
+  const contactValidation = validateContact(contact, isAuthenticated);
+  const activityDetailsValid =
+    Boolean(selectedOption) &&
+    (isAlwaysAvailable ? selectedDateAllowed : Boolean(selectedAvailability)) &&
+    travelers.every((traveler) => traveler.firstName.trim() && traveler.lastName.trim()) &&
+    (pickupPreference === "later" || pickupAddress.trim().length > 2);
+  const bookingDateLabel = isAlwaysAvailable
+    ? formatCheckoutDate(selectedDate)
+    : selectedAvailability
+      ? formatDate(selectedAvailability.startDateTime, "en-US", {
+          dateStyle: "medium",
+          timeStyle: "short"
+        })
+      : "Select date";
+  const totalTravelers = adults + children;
+  const travelerLabel = `${totalTravelers} ${totalTravelers === 1 ? "Traveler" : "Travelers"}`;
+  const stepOneSummary = isAuthenticated
+    ? `${contact.fullName || currentUser?.fullName || "Contact saved"} · ${contact.email || currentUser?.email || ""}`
+    : contactValidation.isValid
+      ? `${contact.fullName} · ${contact.email}`
+      : "Create your account to continue";
 
-  async function submitBooking(event: FormEvent<HTMLFormElement>) {
-    event.preventDefault();
+  async function continueFromStepOne() {
+    if (!contactValidation.isValid) {
+      setError(contactValidation.message);
+      return;
+    }
+
+    setError(null);
+
+    if (isAuthenticated) {
+      setActiveStep(2);
+      return;
+    }
+
+    setIsAuthSubmitting(true);
+
+    try {
+      const auth = await register({
+        fullName: contact.fullName.trim(),
+        email: contact.email.trim(),
+        password: contact.password
+      });
+
+      saveAccessToken(auth.accessToken);
+      setCurrentUser(auth.user);
+      setAuthPrompt(false);
+      setContact((current) => ({
+        ...current,
+        email: current.email || auth.user.email,
+        fullName: current.fullName || auth.user.fullName,
+        password: ""
+      }));
+      setActiveStep(2);
+    } catch (caughtError) {
+      if (caughtError instanceof ApiFetchError && (caughtError.status === 409 || caughtError.error?.code === "AUTH_EMAIL_TAKEN")) {
+        setError("An account already exists with this email. Log in to continue.");
+      } else {
+        setError(caughtError instanceof Error ? caughtError.message : "Unable to create your account");
+      }
+    } finally {
+      setIsAuthSubmitting(false);
+    }
+  }
+
+  async function submitBooking(event?: FormEvent<HTMLFormElement>) {
+    event?.preventDefault();
     if (!activity || !estimate) return;
     if (isAlwaysAvailable && !selectedDateAllowed) {
       setError("Please select a date that matches this package availability.");
@@ -141,6 +370,16 @@ export function CheckoutManager({
     }
     if (!isAlwaysAvailable && !selectedAvailability) {
       setError("Please select an available scheduled session.");
+      return;
+    }
+    if (!contactValidation.isValid || !activityDetailsValid) {
+      setActiveStep(!contactValidation.isValid ? 1 : 2);
+      setError(contactValidation.isValid ? "Please complete the required checkout details before booking." : contactValidation.message);
+      return;
+    }
+    if (!getAccessToken() || !currentUser) {
+      setAuthPrompt(true);
+      setError(null);
       return;
     }
 
@@ -160,9 +399,13 @@ export function CheckoutManager({
             : [])
         ]
       });
-      setBooking(created);
+      const confirmed = await confirmDummyPayment(created.payment!.id);
+      if (typeof window !== "undefined") {
+        window.localStorage.removeItem(draftStorageKey);
+      }
+      router.push(routes.bookingDetail(confirmed.id));
     } catch (caughtError) {
-      setError(caughtError instanceof Error ? caughtError.message : "Unable to create booking");
+      setError(caughtError instanceof Error ? caughtError.message : "Unable to complete booking");
     } finally {
       setIsCreating(false);
     }
@@ -190,40 +433,24 @@ export function CheckoutManager({
     return <EmptyState title="Activity not found" description="This activity is not available for checkout." />;
   }
 
-  if (!getAccessToken()) {
-    return (
-      <div className="mx-auto max-w-3xl px-4 py-16 sm:px-6 lg:px-8">
-        <Card>
-          <CardHeader>
-            <CardTitle>Log in to continue</CardTitle>
-            <CardDescription>
-              Create an Alpii account or log in before creating a booking.
-            </CardDescription>
-          </CardHeader>
-          <CardContent className="flex flex-wrap gap-3">
-            <ButtonCTA href={`${routes.login}?redirect=${encodeURIComponent(checkoutReturnPath)}`}>
-              Log in
-            </ButtonCTA>
-            <ButtonCTA href={routes.register} variant="outline">
-              Create account
-            </ButtonCTA>
-          </CardContent>
-        </Card>
-      </div>
-    );
-  }
-
   return (
-    <main className="mx-auto grid max-w-6xl gap-8 px-4 py-10 sm:px-6 lg:grid-cols-[1fr_380px] lg:px-8">
+    <main className="mx-auto grid max-w-7xl items-start gap-8 px-4 py-8 sm:px-6 lg:grid-cols-[minmax(0,1fr)_390px] lg:px-8">
       <section className="grid gap-5">
-        <ButtonCTA href={routes.activity(activity.slug)} leftIcon={<ArrowLeft className="size-4" />} size="sm" variant="ghost">
-          Back to activity
-        </ButtonCTA>
-        <div>
-          <h1 className="font-brand text-3xl font-semibold text-travel-dark">Complete your booking</h1>
-          <p className="mt-2 max-w-2xl text-sm leading-6 text-travel-muted">
-            Choose a session, confirm participants, then complete the MVP dummy payment.
-          </p>
+        <div className="flex flex-wrap items-center gap-3 rounded-travel-lg border border-[#1A1A1A]/14 bg-[rgb(243_250_247_/_1)] px-4 py-3 shadow-[0_14px_35px_rgba(28,28,28,0.04)] sm:px-5">
+          <div className="flex items-center gap-3">
+            <ButtonCTA
+              aria-label="Back to activity"
+              href={routes.activity(activity.slug)}
+              leftIcon={<ArrowLeft className="size-4" />}
+              size="sm"
+              variant="ghost"
+            >
+              <span className="sr-only">Back to activity</span>
+            </ButtonCTA>
+            <p className="font-interface text-sm font-semibold text-travel-dark">
+              {isAuthenticated ? `Signed in as ${currentUser?.email ?? contact.email}` : "Log in or sign up for a faster checkout."}
+            </p>
+          </div>
         </div>
 
         {booking ? (
@@ -251,173 +478,730 @@ export function CheckoutManager({
           </Card>
         ) : (
           <form className="grid gap-5" onSubmit={submitBooking}>
-            <Card>
-              <CardHeader>
-                <CardTitle>Trip details</CardTitle>
-                <CardDescription>Select the session and participants for this booking.</CardDescription>
-              </CardHeader>
-              <CardContent className="grid gap-4 md:grid-cols-3">
-                {activeOptions.length ? (
-                  <label className="grid gap-2">
-                    <span className="text-sm font-semibold text-travel-dark">Package option</span>
-                    <Select
-                      onChange={(event) => {
-                        const nextOption = activeOptions.find((option) => option.id === event.target.value);
-                        setOptionId(event.target.value);
-                        setAvailabilityId(nextOption?.availability[0]?.id ?? "");
-                        if (nextOption?.availabilityMode === "ALWAYS_AVAILABLE") {
-                          setSelectedDate(nextAvailableDate(nextOption.availableDays));
-                        }
-                      }}
-                      value={selectedOption?.id ?? ""}
-                    >
-                      {activeOptions.map((option) => (
-                        <option key={option.id} value={option.id}>
-                          {option.title}
-                        </option>
-                      ))}
-                    </Select>
-                  </label>
-                ) : null}
-                <label className="grid gap-2">
-                  <span className="text-sm font-semibold text-travel-dark">Date</span>
-                  {isAlwaysAvailable ? (
-                    <div className="grid gap-2">
-                      <Input
-                        className={selectedDateAllowed ? undefined : "border-red-300"}
-                        min={todayInputValue()}
-                        onChange={(event) => setSelectedDate(event.target.value)}
-                        type="date"
-                        value={selectedDate}
-                      />
-                      <span className="text-xs leading-5 text-travel-muted">
-                        {selectedOption?.dailyCapacity
-                          ? `Daily capacity: ${selectedOption.dailyCapacity} travelers.`
-                          : "No daily capacity limit has been set."}
-                        {selectedOption?.availableDays?.length
-                          ? ` Available days: ${formatAvailableDays(selectedOption.availableDays)}.`
-                          : ""}
-                      </span>
-                      {!selectedDateAllowed ? (
-                        <span className="text-xs font-semibold text-red-700">
-                          This package is not available on the selected weekday.
-                        </span>
-                      ) : null}
-                    </div>
-                  ) : (
-                  <Select
-                    disabled={!optionAvailability.length}
-                    onChange={(event) => setAvailabilityId(event.target.value)}
-                    value={availabilityId}
-                  >
-                    {optionAvailability.length ? (
-                      optionAvailability.map((slot) => (
-                        <option key={slot.id} value={slot.id}>
-                          {formatDate(slot.startDateTime, "en-US", { dateStyle: "medium", timeStyle: "short" })}
-                        </option>
-                      ))
-                    ) : (
-                      <option value="">No fixed session</option>
-                    )}
-                  </Select>
-                  )}
-                </label>
-                <label className="grid gap-2">
-                  <span className="text-sm font-semibold text-travel-dark">Adults</span>
-                  <Input
-                    max={Math.max(1, maxTravelers - children)}
-                    min={1}
-                    onChange={(event) =>
-                      setAdults(
-                        Math.min(
-                          Math.max(1, maxTravelers - children),
-                          Math.max(1, Number(event.target.value))
-                        )
-                      )
-                    }
-                    type="number"
-                    value={adults}
-                  />
-                  <span className="text-xs text-travel-muted">Age 14-105</span>
-                </label>
-                <label className="grid gap-2">
-                  <span className="text-sm font-semibold text-travel-dark">Children</span>
-                  <Input
-                    max={Math.max(0, maxTravelers - adults)}
-                    min={0}
-                    onChange={(event) =>
-                      setChildren(
-                        Math.min(
-                          Math.max(0, maxTravelers - adults),
-                          Math.max(0, Number(event.target.value))
-                        )
-                      )
-                    }
-                    type="number"
-                    value={children}
-                  />
-                  <span className="text-xs text-travel-muted">Age 4-13 · child discount applies</span>
-                </label>
-              </CardContent>
-            </Card>
-
-            {estimate?.tier ? (
-              <p className="text-sm text-travel-muted">
-                Price based on {estimate.totalTravelers} travelers using the {estimate.tier.minTravelers}
-                {estimate.tier.minTravelers !== estimate.tier.maxTravelers
-                  ? `-${estimate.tier.maxTravelers}`
-                  : ""} traveler tier.
-              </p>
-            ) : null}
-
-            {error ? <ErrorState title="Checkout error" description={error} /> : null}
-
-            <ButtonCTA
-              disabled={!estimate || (isAlwaysAvailable ? !selectedDateAllowed : !selectedAvailability)}
-              isLoading={isCreating}
-              type="submit"
+            <CheckoutSection
+              isComplete={contactValidation.isValid}
+              isOpen={activeStep === 1}
+              number={1}
+              onEdit={() => setActiveStep(1)}
+              summary={stepOneSummary}
+              title={isAuthenticated ? "Contact details" : "Account & contact details"}
             >
-              Continue to payment
-            </ButtonCTA>
+                {!isAuthenticated ? (
+                  <p className="text-sm leading-6 text-travel-muted">
+                    Create your account so we can send your confirmation and keep your voucher in your dashboard.
+                  </p>
+                ) : (
+                  <div className="rounded-travel-md border border-[#2B2B2B]/10 bg-[#F8F8F8] px-4 py-3">
+                    <p className="text-sm font-semibold text-travel-dark">{contact.fullName || currentUser?.fullName}</p>
+                    <p className="mt-1 text-sm leading-6 text-travel-muted">{contact.email || currentUser?.email}</p>
+                  </div>
+                )}
+                <div className="grid gap-4 md:grid-cols-2">
+                  {!isAuthenticated ? (
+                    <>
+                      <Field label="Full name" required>
+                        <Input
+                          autoComplete="name"
+                          value={contact.fullName}
+                          onChange={(event) => setContactValue("fullName", event.target.value)}
+                        />
+                      </Field>
+                      <Field label="Phone number" required>
+                        <Input
+                          autoComplete="tel"
+                          value={contact.phone}
+                          onChange={(event) => setContactValue("phone", event.target.value)}
+                        />
+                      </Field>
+                      <Field label="Email" required>
+                        <Input
+                          autoComplete="email"
+                          type="email"
+                          value={contact.email}
+                          onChange={(event) => setContactValue("email", event.target.value)}
+                        />
+                      </Field>
+                      <Field label="Password" required>
+                        <Input
+                          autoComplete="new-password"
+                          type="password"
+                          value={contact.password}
+                          onChange={(event) => setContactValue("password", event.target.value)}
+                        />
+                      </Field>
+                    </>
+                  ) : (
+                    <>
+                      <Field label="Phone number" required>
+                        <Input
+                          autoComplete="tel"
+                          value={contact.phone}
+                          onChange={(event) => setContactValue("phone", event.target.value)}
+                        />
+                      </Field>
+                      <Field label="Email">
+                        <Input disabled type="email" value={contact.email} />
+                      </Field>
+                    </>
+                  )}
+                </div>
+                {error && activeStep === 1 ? <ErrorState title="Checkout error" description={error} /> : null}
+                <div className={`flex flex-wrap gap-3 ${isAuthenticated ? "justify-end" : "justify-between"}`}>
+                  {!isAuthenticated ? (
+                    <ButtonCTA
+                      className="border-[#1A1A1A]/16 bg-white text-travel-dark hover:border-primary hover:text-primary"
+                      href={`${routes.login}?redirect=${encodeURIComponent(checkoutReturnPath)}`}
+                      type="button"
+                      variant="outline"
+                    >
+                      Already have an account? Log in
+                    </ButtonCTA>
+                  ) : null}
+                  <ButtonCTA
+                    disabled={!contactValidation.isValid}
+                    isLoading={isAuthSubmitting}
+                    onClick={continueFromStepOne}
+                    type="button"
+                  >
+                    {isAuthenticated ? "Continue" : "Register and Continue Payment"}
+                  </ButtonCTA>
+                </div>
+            </CheckoutSection>
+
+            <CheckoutSection
+              isComplete={activityDetailsValid}
+              isOpen={activeStep === 2}
+              number={2}
+              onEdit={() => contactValidation.isValid && setActiveStep(2)}
+              summary={activityDetailsValid ? `${travelerLabel} · ${bookingDateLabel}` : "Traveler details and pickup"}
+              title="Activity details"
+            >
+              <div className="grid gap-4">
+                {travelers.map((traveler, index) => (
+                    <div
+                      key={`${traveler.type}-${index}`}
+                      className="grid gap-3 border-t border-[#2B2B2B]/10 pt-4 first:border-t-0 first:pt-0"
+                    >
+                      <p className="font-interface text-sm font-semibold text-travel-dark">
+                        Traveler {index + 1} · {traveler.type}
+                      </p>
+                      <div className="grid gap-3 md:grid-cols-2">
+                        <Field label="First name" required>
+                          <Input
+                            value={traveler.firstName}
+                            onChange={(event) => updateTraveler(index, "firstName", event.target.value)}
+                          />
+                        </Field>
+                        <Field label="Last name" required>
+                          <Input
+                            value={traveler.lastName}
+                            onChange={(event) => updateTraveler(index, "lastName", event.target.value)}
+                          />
+                        </Field>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+
+                <div className="grid gap-4 border-t border-[#2B2B2B]/10 pt-4">
+                  <p className="font-interface text-sm font-semibold text-travel-dark">Pickup point</p>
+                  <div className="grid gap-3 sm:grid-cols-2">
+                    <label className={optionCardClass(pickupPreference === "pickup")}>
+                      <input
+                        checked={pickupPreference === "pickup"}
+                        className="accent-primary"
+                        onChange={() => setPickupPreference("pickup")}
+                        type="radio"
+                      />
+                      I'd like to be picked up
+                    </label>
+                    <label className={optionCardClass(pickupPreference === "later")}>
+                      <input
+                        checked={pickupPreference === "later"}
+                        className="accent-primary"
+                        onChange={() => setPickupPreference("later")}
+                        type="radio"
+                      />
+                      I'll decide later
+                    </label>
+                  </div>
+                  {pickupPreference === "pickup" ? (
+                    <div className="grid gap-2">
+                      <Field label="Search pickup location" required>
+                        <div className="relative">
+                          <MapPin className="pointer-events-none absolute left-3 top-1/2 size-4 -translate-y-1/2 text-primary" />
+                          <Input
+                            className="pl-9"
+                            placeholder="Search hotel, villa, or address"
+                            value={pickupAddress}
+                            onChange={(event) => setPickupAddress(event.target.value)}
+                          />
+                        </div>
+                      </Field>
+                      <div className="text-xs leading-5 text-travel-muted">
+                        Google Maps pickup search placeholder. Places autocomplete will connect here in the backend/API sprint.
+                      </div>
+                    </div>
+                  ) : null}
+                </div>
+
+                <div className="grid gap-4 border-t border-[#2B2B2B]/10 pt-4">
+                  <Field label="Special requirements">
+                    <div className="grid gap-2">
+                      <Textarea
+                        className="min-h-24"
+                        maxLength={1000}
+                        onChange={(event) => setSpecialRequirements(event.target.value)}
+                        placeholder="Dietary needs, accessibility notes, or anything the operator should know."
+                        value={specialRequirements}
+                      />
+                      <span className="text-right text-xs text-travel-muted">{specialRequirements.length}/1000</span>
+                    </div>
+                  </Field>
+                </div>
+                <div className="flex flex-wrap justify-between gap-3">
+                  <ButtonCTA onClick={() => setActiveStep(1)} type="button" variant="outline">
+                    Back
+                  </ButtonCTA>
+                  <ButtonCTA disabled={!activityDetailsValid} onClick={() => setActiveStep(3)} type="button">
+                    Continue to payment
+                  </ButtonCTA>
+                </div>
+            </CheckoutSection>
+
+            <CheckoutSection
+              isComplete={Boolean(estimate && contactValidation.isValid && activityDetailsValid)}
+              isOpen={activeStep === 3}
+              number={3}
+              onEdit={() => contactValidation.isValid && activityDetailsValid && setActiveStep(3)}
+              summary={estimate ? `${formatMoney(estimate.totalAmountCents, displayCurrency)} total` : "Payment method"}
+              title="Payment details"
+            >
+                <div className="grid gap-7">
+                  <div className="grid gap-3">
+                    <p className="font-brand text-[16px] font-semibold leading-6 text-travel-dark">Choose when to pay</p>
+                    <div className="overflow-hidden rounded-travel-lg">
+                      <button
+                        className={[
+                          "flex w-full items-start justify-between gap-4 rounded-t-travel-lg border px-5 py-4 text-left transition",
+                          paymentTiming === "pay_now"
+                            ? "relative z-10 border-[#B92216] bg-[#B92216]/[0.04] shadow-[inset_0_0_0_1px_#B92216]"
+                            : "border-[#1A1A1A]/14 bg-white hover:bg-[#fafafa]"
+                        ].join(" ")}
+                        onClick={() => setPaymentTiming("pay_now")}
+                        type="button"
+                      >
+                        <div className="flex items-start gap-4">
+                          <span className="mt-1 grid size-6 place-items-center rounded-full border border-[#B92216] text-[#B92216]">
+                            <span className={["size-2.5 rounded-full", paymentTiming === "pay_now" ? "bg-[#B92216]" : "bg-transparent"].join(" ")} />
+                          </span>
+                          <div>
+                            <p className="font-brand text-[15px] font-semibold leading-6 text-travel-dark">Pay now</p>
+                          </div>
+                        </div>
+                        <p className="font-brand text-[15px] font-semibold leading-6 text-travel-dark">
+                          {estimate ? formatMoney(estimate.totalAmountCents, displayCurrency) : "Price unavailable"}
+                        </p>
+                      </button>
+                      <button
+                        className={[
+                          "mt-[-1px] flex w-full items-start justify-between gap-4 rounded-b-travel-lg border px-5 py-4 text-left transition",
+                          paymentTiming === "pay_later"
+                            ? "relative z-10 bg-[#B92216]/[0.04] shadow-[inset_0_0_0_1px_#B92216]"
+                            : "border-[#1A1A1A]/14 bg-white hover:bg-[#fafafa]"
+                        ].join(" ")}
+                        onClick={() => setPaymentTiming("pay_later")}
+                        type="button"
+                      >
+                        <div className="flex items-start gap-4">
+                          <span className="mt-1 grid size-6 place-items-center rounded-full border border-[#B92216] text-[#B92216]">
+                            <span className={["size-2.5 rounded-full", paymentTiming === "pay_later" ? "bg-[#B92216]" : "bg-transparent"].join(" ")} />
+                          </span>
+                          <div>
+                            <p className="font-brand text-[15px] font-semibold leading-6 text-travel-dark">Reserve now & pay later</p>
+                            <p className="mt-1 text-[13px] leading-5 text-travel-muted">
+                              No extra fees. You&apos;ll be charged {estimate ? formatMoney(estimate.totalAmountCents, displayCurrency) : "later"} on your travel date.
+                            </p>
+                          </div>
+                        </div>
+                        <div className="text-right">
+                          <p className="font-brand text-[15px] font-semibold leading-6 text-travel-dark">
+                            {paymentTiming === "pay_later" ? formatMoney(0, displayCurrency) : formatMoney(0, displayCurrency)}
+                          </p>
+                          <p className="text-[13px] leading-5 text-travel-muted">now</p>
+                        </div>
+                      </button>
+                    </div>
+                  </div>
+
+                  <div className="grid gap-3 border-t border-[#1A1A1A]/12 pt-6">
+                    <div className="flex items-center justify-between gap-4">
+                      <p className="font-brand text-[16px] font-semibold leading-6 text-travel-dark">Pay with</p>
+                      <div className="flex items-center gap-2 text-travel-muted">
+                        <CreditCard className="size-4" />
+                        <span className="text-[13px] font-medium">Checkout</span>
+                      </div>
+                    </div>
+
+                    <button
+                      className={[
+                        "flex w-full items-center gap-4 rounded-travel-md border px-4 py-4 text-left transition",
+                        paymentMethod === "card" ? "border-[#B92216] bg-[#B92216]/[0.04]" : "border-[#1A1A1A]/14 bg-white hover:bg-[#fafafa]"
+                      ].join(" ")}
+                      onClick={() => setPaymentMethod((current) => (current === "card" ? null : "card"))}
+                      type="button"
+                    >
+                      <span className="grid size-6 shrink-0 place-items-center rounded-full border border-[#B92216] text-[#B92216]">
+                        <span className={["size-2.5 rounded-full", paymentMethod === "card" ? "bg-[#B92216]" : "bg-transparent"].join(" ")} />
+                      </span>
+                      <div className="flex items-center gap-2">
+                        <span className="rounded-md border border-[#1A1A1A]/12 bg-white px-2 py-1 text-[10px] font-bold tracking-[0.08em] text-[#1A4ED8]">
+                          VISA
+                        </span>
+                        <span className="rounded-md border border-[#1A1A1A]/12 bg-white px-2 py-1 text-[10px] font-bold tracking-[0.08em] text-[#1B7BD5]">
+                          AMEX
+                        </span>
+                        <span className="rounded-md border border-[#1A1A1A]/12 bg-white px-2 py-1 text-[10px] font-bold tracking-[0.08em] text-[#D3342A]">
+                          MC
+                        </span>
+                      </div>
+                      <span className="font-brand text-[15px] font-semibold leading-6 text-travel-dark">Debit/Credit Card</span>
+                    </button>
+
+                    {paymentMethod === "card" ? (
+                      <div className="grid gap-4 rounded-travel-md border border-[#1A1A1A]/12 bg-white p-4">
+                        <Field label="Cardholder name">
+                          <Input disabled value="Alpii Payment Demo" />
+                        </Field>
+                        <Field label="Credit Card Number">
+                          <Input disabled value="1234 1234 1234 1234" />
+                        </Field>
+                        <div className="grid gap-4 md:grid-cols-[160px_32px_160px_minmax(0,1fr)] md:items-end">
+                          <Field label="Expiration Date">
+                            <Input disabled value="01" />
+                          </Field>
+                          <div className="hidden pb-3 text-center text-[28px] leading-none text-travel-dark md:block">/</div>
+                          <div className="grid gap-2 md:col-start-3">
+                            <span className="text-sm font-semibold text-transparent">Year</span>
+                            <Input disabled value="28" />
+                          </div>
+                          <div className="grid gap-2">
+                            <Field label="Security Code">
+                              <Input disabled value="123" />
+                            </Field>
+                          </div>
+                        </div>
+                      </div>
+                    ) : null}
+                  </div>
+                </div>
+
+                {authPrompt ? (
+                  <div className="rounded-xl border border-primary/20 bg-primary/5 p-4">
+                    <p className="font-interface text-sm font-semibold text-travel-dark">
+                      Create your account in Step 1 to complete this booking.
+                    </p>
+                    <p className="mt-1 text-sm leading-6 text-travel-muted">
+                      Your traveler and trip details are ready. Finish the account step first, then come back here.
+                    </p>
+                    <div className="mt-3 flex flex-wrap gap-2">
+                      <ButtonCTA onClick={() => setActiveStep(1)} size="sm" type="button">
+                        Go to account step
+                      </ButtonCTA>
+                      <ButtonCTA href={`${routes.login}?redirect=${encodeURIComponent(checkoutReturnPath)}`} size="sm" variant="outline">
+                        Log in instead
+                      </ButtonCTA>
+                    </div>
+                  </div>
+                ) : null}
+
+                {error ? <ErrorState title="Checkout error" description={error} /> : null}
+
+                <div className="grid gap-4">
+                  <p className="text-[13px] leading-5 text-travel-muted">
+                    Clicking &apos;Book Now&apos; confirms your agreement to Viator&apos;s{" "}
+                    <a className="font-medium text-travel-dark underline underline-offset-2" href="https://www.viator.com/support/termsAndConditions" rel="noreferrer" target="_blank">
+                      Terms
+                    </a>{" "}
+                    and{" "}
+                    <a className="font-medium text-travel-dark underline underline-offset-2" href="https://www.viator.com/support/privacyPolicy" rel="noreferrer" target="_blank">
+                      Privacy Statement
+                    </a>
+                    , and your direct contract with the supplier per the{" "}
+                    <a className="font-medium text-travel-dark underline underline-offset-2" href="https://www.viator.com/tours/Florence/Tuscany-Day-Trip-from-Florence-Siena-San-Gimignano-Pisa-and-Lunch-at-a-Winery/d519-5070TUSCANY" rel="noreferrer" target="_blank">
+                      listing
+                    </a>
+                    .
+                  </p>
+                </div>
+
+                <div className="grid gap-3">
+                  <ButtonCTA
+                    disabled={!estimate}
+                    fullWidth
+                    isLoading={isCreating}
+                    leftIcon={<LockKeyhole className="size-4" />}
+                    type="submit"
+                  >
+                    Book Now
+                  </ButtonCTA>
+                </div>
+            </CheckoutSection>
           </form>
         )}
       </section>
 
-      <aside>
-        <Card className="sticky top-24 shadow-travel-card">
-          <img alt={activity.title} className="aspect-[4/3] w-full rounded-t-travel-lg object-cover" src={mappedActivity.imageUrl} />
-          <CardHeader>
-            <p className="text-sm text-travel-muted">{mappedActivity.location}</p>
-            <CardTitle>{activity.title}</CardTitle>
-          </CardHeader>
-          <CardContent className="space-y-3">
-            <SummaryLine
-              label={`Adult x ${adults}`}
-              value={estimate ? formatMoney(estimate.adultLineTotalCents, displayCurrency) : "Price unavailable"}
-            />
-            {children > 0 ? (
-              <SummaryLine
-                label={`Child x ${children}`}
-                value={estimate ? formatMoney(estimate.childLineTotalCents, displayCurrency) : "Price unavailable"}
-              />
-            ) : null}
-            <div className="border-t border-[#2B2B2B]/10 pt-3">
-              <SummaryLine label="Total" value={estimate ? formatMoney(estimate.totalAmountCents, displayCurrency) : "Price unavailable"} />
-              {estimate && displayCurrency !== "USD" ? (
-                <p className="mt-2 text-right text-xs leading-5 text-travel-muted">
-                  Base price charged in USD for MVP: {formatBaseUsd(estimate.totalAmountCents)}
-                </p>
-              ) : (
-                <p className="mt-2 text-right text-xs leading-5 text-travel-muted">
-                  Booking and payment source of truth is USD.
-                </p>
-              )}
+      <aside className="hidden lg:block lg:w-[390px]" aria-hidden="true" />
+      <div className="pointer-events-none fixed right-[max(2rem,calc((100vw-80rem)/2+2rem))] top-[88px] z-30 hidden w-[390px] lg:block">
+        <div className="pointer-events-auto max-h-[calc(100vh-104px)] overflow-y-auto pb-4">
+          <Card className="overflow-hidden border-[#2B2B2B]/20 shadow-none">
+            <div className="border-b border-[#2B2B2B]/10 bg-[#ffdbdb] px-5 py-3">
+              <div className="flex items-center justify-center gap-2 text-sm font-semibold text-travel-dark">
+                <Clock3 className="size-4 text-primary" />
+                Holding your spot for {formatHoldTime(holdSeconds)}
+              </div>
             </div>
-          </CardContent>
-        </Card>
-      </aside>
+            <CardContent className="space-y-0 p-0">
+              <div className="flex items-start gap-4 px-5 py-5">
+                <img
+                  alt={activity.title}
+                  className="size-[88px] rounded-travel-md object-cover"
+                  src={mappedActivity.imageUrl}
+                />
+                <div className="min-w-0 flex-1">
+                  <p className="line-clamp-2 font-brand text-[15px] font-semibold leading-6 text-travel-dark">
+                    {activity.title}
+                  </p>
+                  {selectedOption?.title ? (
+                    <p className="mt-1 text-sm leading-6 text-travel-muted">{selectedOption.title}</p>
+                  ) : null}
+                </div>
+              </div>
+              <div className="border-t border-[#2B2B2B]/8 px-5 py-5">
+                <div className="flex items-start justify-between gap-4">
+                  <div className="space-y-3 text-travel-dark">
+                    <div className="flex items-center gap-3 text-[15px] font-medium leading-6">
+                      <UserRound className="size-5 text-travel-muted" />
+                      <span>{travelerLabel}</span>
+                    </div>
+                    <div className="flex items-center gap-3 text-[15px] font-medium leading-6">
+                      <CalendarDays className="size-5 text-travel-muted" />
+                      <span>{bookingDateLabel}</span>
+                    </div>
+                  </div>
+                  <div className="text-right">
+                    <p className="font-brand text-[16px] font-semibold leading-6 text-travel-dark">
+                      {estimate ? formatMoney(estimate.totalAmountCents, displayCurrency) : "Price unavailable"}
+                    </p>
+                  </div>
+                </div>
+                <div className="mt-4 flex items-start gap-3 text-[15px] leading-6 text-travel-dark">
+                  <CheckCircle2 className="mt-0.5 size-5 shrink-0 text-primary" />
+                  <p>
+                    <span className="font-semibold">Free cancellation</span>
+                    <br />
+                    <span className="text-travel-muted">
+                      {formatCancellationDeadline({
+                        availabilityStartDateTime: selectedAvailability?.startDateTime,
+                        selectedDate
+                      })}
+                    </span>
+                  </p>
+                </div>
+              </div>
+              <div className="border-t border-[#2B2B2B]/8 bg-[#F8F8F8]">
+                <button
+                  className="flex w-full items-center justify-between gap-3 px-5 py-4 text-left transition hover:bg-[#f2f2f2]"
+                  onClick={() => setPromoOpen((current) => !current)}
+                  type="button"
+                >
+                  <span className="flex items-center gap-3 text-travel-dark">
+                    <Tag className="size-5" />
+                    <span className="text-[15px] font-semibold leading-6 underline underline-offset-2">Enter Promo Code</span>
+                  </span>
+                  <ChevronDown className={["size-4 text-travel-muted transition", promoOpen ? "rotate-180" : ""].join(" ")} />
+                </button>
+                {promoOpen ? (
+                  <div className="border-t border-[#2B2B2B]/8 px-5 pb-4 pt-3">
+                    <div className="flex gap-2">
+                      <Input placeholder="Enter promo code" value={promoCode} onChange={(event) => setPromoCode(event.target.value)} />
+                      <ButtonCTA type="button" variant="outline">
+                        Apply
+                      </ButtonCTA>
+                    </div>
+                  </div>
+                ) : null}
+              </div>
+              <div className="px-5 py-5">
+                <div className="space-y-2">
+                  <SummaryLine
+                    label={`Adult x ${adults}${estimate ? ` · ${formatMoney(estimate.adultUnitPriceCents, displayCurrency)}` : ""}`}
+                    value={estimate ? formatMoney(estimate.adultLineTotalCents, displayCurrency) : "Price unavailable"}
+                  />
+                  {children > 0 ? (
+                    <SummaryLine
+                      label={`Child x ${children}${estimate ? ` · ${formatMoney(estimate.childUnitPriceCents, displayCurrency)}` : ""}`}
+                      value={estimate ? formatMoney(estimate.childLineTotalCents, displayCurrency) : "Price unavailable"}
+                    />
+                  ) : null}
+                </div>
+                <div className="mt-4 border-t border-[#2B2B2B]/10 pt-4">
+                  <SummaryLine
+                    label={
+                      <span>
+                        Total price{" "}
+                        <button
+                          className="font-semibold underline underline-offset-2 transition hover:text-primary"
+                          onClick={() => setCurrencyDialogOpen(true)}
+                          type="button"
+                        >
+                          ({displayCurrency})
+                        </button>
+                      </span>
+                    }
+                    value={estimate ? formatMoney(estimate.totalAmountCents, displayCurrency) : "Price unavailable"}
+                  />
+                  {estimate && displayCurrency !== "USD" ? (
+                    <p className="mt-2 text-right text-xs leading-5 text-travel-muted">
+                      Base charge: {formatBaseUsd(estimate.totalAmountCents)}
+                    </p>
+                  ) : null}
+                </div>
+              </div>
+            </CardContent>
+          </Card>
+        </div>
+      </div>
+      <Dialog
+        bodyClassName="p-3 sm:p-3"
+        description="Choose the currency used for displaying this checkout summary."
+        onClose={() => setCurrencyDialogOpen(false)}
+        open={currencyDialogOpen}
+        panelClassName="max-w-sm"
+        title="Display currency"
+      >
+        <div className="grid gap-2">
+          {supportedCurrencies.map((item) => {
+            const isSelected = item === displayCurrency;
+            return (
+              <button
+                className={[
+                  "flex items-center justify-between rounded-travel-md border px-4 py-3 text-left transition",
+                  isSelected
+                    ? "border-primary bg-primary/5 text-primary"
+                    : "border-[#2B2B2B]/10 bg-white text-travel-dark hover:border-primary/30 hover:bg-[#FAFAFA]"
+                ].join(" ")}
+                key={item}
+                onClick={() => {
+                  setDisplayCurrency(item);
+                  setCurrencyDialogOpen(false);
+                }}
+                type="button"
+              >
+                <span className="font-interface text-sm font-semibold">{item}</span>
+                {isSelected ? <span className="text-xs font-semibold">Selected</span> : null}
+              </button>
+            );
+          })}
+        </div>
+      </Dialog>
     </main>
   );
+
+  function setContactValue<TKey extends keyof typeof contact>(key: TKey, value: (typeof contact)[TKey]) {
+    setContact((current) => ({ ...current, [key]: value }));
+  }
+
+  function updateTraveler(index: number, key: "firstName" | "lastName", value: string) {
+    setTravelers((current) =>
+      current.map((traveler, travelerIndex) =>
+        travelerIndex === index ? { ...traveler, [key]: value } : traveler
+      )
+    );
+  }
+}
+
+function CheckoutSection({
+  children,
+  isComplete,
+  isOpen,
+  number,
+  onEdit,
+  summary,
+  title
+}: {
+  children: ReactNode;
+  isComplete: boolean;
+  isOpen: boolean;
+  number: number;
+  onEdit: () => void;
+  summary: string;
+  title: string;
+}) {
+  return (
+    <Card
+      className={
+        isOpen
+          ? "overflow-hidden border-[#2B2B2B]/18 bg-white shadow-[0_18px_42px_rgba(28,28,28,0.08)]"
+          : "overflow-hidden border-[#2B2B2B]/12 bg-white shadow-[0_8px_18px_rgba(28,28,28,0.03)]"
+      }
+    >
+      <CardHeader
+        className={[
+          "flex flex-row items-center justify-between gap-4 space-y-0 px-6 py-5",
+          isOpen ? "bg-[#F6F7F8]" : "bg-white"
+        ].join(" ")}
+      >
+        <div className="flex min-w-0 items-center gap-4">
+          <div
+            className={[
+              "flex size-8 shrink-0 items-center justify-center rounded-full text-[15px] font-semibold shadow-[inset_0_1px_0_rgba(255,255,255,0.35)]",
+              isComplete || isOpen
+                ? "bg-[#B92216] text-white"
+                : "bg-[#ffdbdb] text-[#1A1A1A]"
+            ].join(" ")}
+          >
+            {isComplete && !isOpen ? <CheckCircle2 className="size-[14px]" /> : number}
+          </div>
+          <div className="min-w-0">
+            <CardTitle className="text-[1.05rem]">{title}</CardTitle>
+            <CardDescription className="truncate text-[13px] leading-5">{summary}</CardDescription>
+          </div>
+        </div>
+        {!isOpen ? (
+          <button
+            className="rounded-full border border-[#2B2B2B]/12 bg-white px-4 py-2 text-sm font-semibold text-travel-dark transition hover:border-primary hover:text-primary"
+            onClick={onEdit}
+            type="button"
+          >
+            Edit
+          </button>
+        ) : null}
+      </CardHeader>
+      {isOpen ? <CardContent className="grid gap-6 border-t border-[#2B2B2B]/8 px-6 pb-6 pt-5">{children}</CardContent> : null}
+    </Card>
+  );
+}
+
+function Field({
+  children,
+  label,
+  required
+}: {
+  children: ReactNode;
+  label: string;
+  required?: boolean;
+}) {
+  return (
+    <label className="grid gap-2">
+      <span className="text-sm font-semibold text-travel-dark">
+        {label} {required ? <span className="text-primary">*</span> : null}
+      </span>
+      {children}
+    </label>
+  );
+}
+
+function validateContact(contact: {
+  email: string;
+  fullName: string;
+  password: string;
+  phone: string;
+}, isAuthenticated: boolean) {
+  const hasRequiredFields =
+    contact.fullName.trim().length > 0 &&
+    contact.email.trim().length > 0 &&
+    contact.phone.trim().length > 0;
+  const emailLooksValid = /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(contact.email.trim());
+  const passwordValid = isAuthenticated || contact.password.trim().length >= 8;
+
+  if (!contact.fullName.trim().length) {
+    return {
+      isValid: false,
+      message: "Please enter your full name."
+    };
+  }
+
+  if (!contact.phone.trim().length) {
+    return {
+      isValid: false,
+      message: "Please enter your phone number."
+    };
+  }
+
+  if (!contact.email.trim().length || !emailLooksValid) {
+    return {
+      isValid: false,
+      message: "Please enter a valid email address."
+    };
+  }
+
+  if (!passwordValid) {
+    return {
+      isValid: false,
+      message: "Password must be at least 8 characters."
+    };
+  }
+
+  return {
+    isValid: hasRequiredFields && emailLooksValid && passwordValid,
+    message: null
+  };
+}
+
+function optionCardClass(isSelected: boolean) {
+  return [
+    "flex items-start gap-3 rounded-xl border p-4 text-sm transition",
+    isSelected ? "border-primary bg-primary/5" : "border-travel-border bg-white"
+  ].join(" ");
+}
+
+function formatCheckoutDate(value: string) {
+  const date = new Date(`${value}T00:00:00Z`);
+  if (Number.isNaN(date.getTime())) return "Select date";
+  return new Intl.DateTimeFormat("en-US", {
+    day: "numeric",
+    month: "short",
+    year: "numeric",
+    timeZone: "UTC"
+  }).format(date);
+}
+
+function formatCancellationDeadline({
+  availabilityStartDateTime,
+  selectedDate
+}: {
+  availabilityStartDateTime?: string;
+  selectedDate?: string;
+}) {
+  const baseDate = availabilityStartDateTime
+    ? new Date(availabilityStartDateTime)
+    : selectedDate
+      ? new Date(`${selectedDate}T09:00:00Z`)
+      : null;
+
+  if (!baseDate || Number.isNaN(baseDate.getTime())) {
+    return "Until 9:00 AM on the previous day";
+  }
+
+  const deadline = new Date(baseDate);
+  deadline.setUTCDate(deadline.getUTCDate() - 1);
+  deadline.setUTCHours(9, 0, 0, 0);
+
+  const formattedDate = new Intl.DateTimeFormat("en-US", {
+    day: "numeric",
+    month: "short",
+    year: "numeric",
+    timeZone: "UTC"
+  }).format(deadline);
+
+  return `Until 9:00 AM on ${formattedDate}`;
+}
+
+function formatHoldTime(seconds: number) {
+  const minutes = Math.floor(seconds / 60);
+  const remainder = seconds % 60;
+  return `${String(minutes).padStart(2, "0")}:${String(remainder).padStart(2, "0")} minutes`;
 }
 
 function clampQuantity(value: string | undefined, min: number, max: number, fallback: number) {
@@ -453,12 +1237,6 @@ function isDateAllowed(value: string, availableDays?: string[] | null) {
   if (Number.isNaN(date.getTime())) return false;
   const allowed = new Set(availableDays.map((day) => day.toUpperCase()));
   return allowed.has(weekdayByIndex[date.getUTCDay()]);
-}
-
-function formatAvailableDays(availableDays: string[]) {
-  return availableDays
-    .map((day) => day.charAt(0) + day.slice(1).toLowerCase())
-    .join(", ");
 }
 
 export function UserBookingsManager() {
@@ -502,15 +1280,24 @@ export function UserBookingDetailManager({ bookingId }: { bookingId: string }) {
   const { currency: displayCurrency } = useCurrency();
   const [booking, setBooking] = useState<Booking | null>(null);
   const [review, setReview] = useState<UserReview | null>(null);
+  const [viewer, setViewer] = useState<AuthUser | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [isLoading, setIsLoading] = useState(true);
+  const [isCompleting, setIsCompleting] = useState(false);
 
   useEffect(() => {
     async function load() {
       try {
-        const [nextBooking, reviews] = await Promise.all([getBooking(bookingId), getMyReviews()]);
+        const [nextBooking, me] = await Promise.all([getBooking(bookingId), getMe()]);
         setBooking(nextBooking);
-        setReview(reviews.find((item) => item.bookingId === bookingId) ?? null);
+        setViewer(me.user);
+
+        if (me.user.role === "USER") {
+          const reviews = await getMyReviews();
+          setReview(reviews.find((item) => item.bookingId === bookingId) ?? null);
+        } else {
+          setReview(null);
+        }
       } catch (caughtError) {
         setError(caughtError instanceof Error ? caughtError.message : "Unable to load booking");
       } finally {
@@ -526,6 +1313,24 @@ export function UserBookingDetailManager({ bookingId }: { bookingId: string }) {
   if (!booking) return <EmptyState title="Booking not found" description="This booking could not be loaded." />;
 
   const cover = booking.activity.media?.[0]?.url ?? booking.activity.media?.[0]?.file?.url;
+  const canOperateVoucher = viewer?.role === "PARTNER" || viewer?.role === "ADMIN" || viewer?.role === "SUPER_ADMIN";
+  const canReview = viewer?.role === "USER" && booking.status === "COMPLETED";
+  const canCompleteTour = Boolean(canOperateVoucher && booking.voucher?.code && booking.status !== "COMPLETED");
+
+  async function markCompletedTour() {
+    if (!booking?.voucher?.code || !canOperateVoucher) return;
+
+    setIsCompleting(true);
+    setError(null);
+    try {
+      const result = await validateVoucher(booking.voucher.code);
+      setBooking(result.booking);
+    } catch (caughtError) {
+      setError(caughtError instanceof Error ? caughtError.message : "Unable to complete tour");
+    } finally {
+      setIsCompleting(false);
+    }
+  }
 
   return (
     <div className="grid gap-5 xl:grid-cols-[1fr_360px]">
@@ -560,7 +1365,7 @@ export function UserBookingDetailManager({ bookingId }: { bookingId: string }) {
             )}
           </CardContent>
         </Card>
-        {booking.status === "COMPLETED" ? (
+        {canReview ? (
           <UserReviewCard
             bookingId={booking.id}
             existingReview={review}
@@ -572,6 +1377,22 @@ export function UserBookingDetailManager({ bookingId }: { bookingId: string }) {
         <Card>
           {cover ? <img alt="" className="aspect-[4/3] w-full rounded-t-travel-lg object-cover" src={cover} /> : null}
           <CardContent className="space-y-3 pt-5">
+            {canOperateVoucher ? (
+              <>
+                <ButtonCTA href={routes.partnerVouchers} fullWidth variant="outline">
+                  Scan the barcode
+                </ButtonCTA>
+                <ButtonCTA
+                  disabled={!canCompleteTour}
+                  fullWidth
+                  isLoading={isCompleting}
+                  onClick={markCompletedTour}
+                  type="button"
+                >
+                  {booking.status === "COMPLETED" ? "Tour completed" : "Mark as completed tour"}
+                </ButtonCTA>
+              </>
+            ) : null}
             <ButtonCTA href={routes.activity(booking.activity.slug)} fullWidth variant="outline">
               View activity
             </ButtonCTA>
@@ -885,7 +1706,7 @@ function VoucherCard({ status, voucherCode }: { status: string; voucherCode: str
   );
 }
 
-function SummaryLine({ label, value }: { label: string; value: string }) {
+function SummaryLine({ label, value }: { label: ReactNode; value: ReactNode }) {
   return (
     <div className="flex items-center justify-between gap-4">
       <span className="text-sm text-travel-muted">{label}</span>

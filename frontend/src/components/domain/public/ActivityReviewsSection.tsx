@@ -95,7 +95,7 @@ export function ActivityReviewsSection({ activitySlug }: { activitySlug: string 
 
 function ReviewSummary({ data }: { data: PublicReviewsResponse }) {
   return (
-    <aside className="self-start rounded-travel-lg border border-[#2B2B2B]/15 bg-white p-5">
+    <aside className="self-start rounded-travel-lg border border-[#2B2B2B]/15 bg-white p-5 lg:sticky lg:top-24">
       <div className="flex items-end gap-2">
         <span className="font-brand text-4xl font-semibold leading-none text-travel-dark">
           {Number(data.ratingAverage).toFixed(1)}
