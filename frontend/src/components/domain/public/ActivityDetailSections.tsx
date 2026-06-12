@@ -2,6 +2,7 @@
 
 import type { ReactNode } from "react";
 import { createContext, useContext, useEffect, useMemo, useState } from "react";
+import { useRouter } from "next/navigation";
 import {
   CalendarDays,
   Check,
@@ -742,10 +743,12 @@ function InlinePackageOption({
   selectedDate: string;
   selectedSession: TravelActivityAvailability | null;
 }) {
+  const router = useRouter();
   const totalTravelers = adults + children;
   const unitPrice = Math.round(item.estimate.totalAmountCents / Math.max(totalTravelers, 1));
   const meetingTimes = Array.isArray(item.option.meetingTimes) ? item.option.meetingTimes : [];
   const [selectedMeetingTime, setSelectedMeetingTime] = useState(meetingTimes[0] ?? "");
+  const [processingAction, setProcessingAction] = useState<"book" | "reserve" | null>(null);
   const checkoutHref = packageCheckoutHref({
     activity,
     adults,
@@ -755,6 +758,14 @@ function InlinePackageOption({
     selectedMeetingTime,
     selectedSession
   });
+
+  async function continueToCheckout(action: "book" | "reserve") {
+    if (processingAction) return;
+
+    setProcessingAction(action);
+    await new Promise((resolve) => window.setTimeout(resolve, 1000));
+    router.push(checkoutHref);
+  }
 
   return (
     <article
@@ -836,7 +847,7 @@ function InlinePackageOption({
                       onClick={() => setSelectedMeetingTime(time)}
                       type="button"
                     >
-                      {formatMeetingTime(time)}
+                      {time}
                     </button>
                   ))}
                 </div>
@@ -870,11 +881,24 @@ function InlinePackageOption({
           </div>
 
           <div className="flex flex-col justify-center gap-3 border-t border-[#2B2B2B]/14 p-4 sm:border-l sm:border-t-0 sm:p-5">
-            <ButtonCTA fullWidth href={checkoutHref} size="lg" variant="outline">
-              Reserve Now & Pay Later
+            <ButtonCTA
+              disabled={processingAction !== null}
+              fullWidth
+              isLoading={processingAction === "reserve"}
+              onClick={() => void continueToCheckout("reserve")}
+              size="lg"
+              variant="outline"
+            >
+              {processingAction === "reserve" ? "Processing..." : "Reserve Now & Pay Later"}
             </ButtonCTA>
-            <ButtonCTA fullWidth href={checkoutHref} size="lg">
-              Book Now
+            <ButtonCTA
+              disabled={processingAction !== null}
+              fullWidth
+              isLoading={processingAction === "book"}
+              onClick={() => void continueToCheckout("book")}
+              size="lg"
+            >
+              {processingAction === "book" ? "Processing..." : "Book Now"}
             </ButtonCTA>
           </div>
         </div>
@@ -1135,15 +1159,6 @@ function packageCheckoutHref({
       ? { availabilityId: selectedSession.id }
       : {})
   }).toString()}`;
-}
-
-function formatMeetingTime(value: string) {
-  const [hours, minutes] = value.split(":").map(Number);
-  if (!Number.isFinite(hours) || !Number.isFinite(minutes)) return value;
-  return new Intl.DateTimeFormat("en-US", {
-    hour: "numeric",
-    minute: "2-digit"
-  }).format(new Date(Date.UTC(2026, 0, 1, hours, minutes)));
 }
 
 function todayInputValue() {

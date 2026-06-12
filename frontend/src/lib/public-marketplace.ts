@@ -11,6 +11,7 @@ type PublicCity = {
   slug: string;
   country: string;
   description?: string | null;
+  imageUrl?: string | null;
   imageFile?: {
     url?: string | null;
   } | null;
@@ -142,7 +143,8 @@ export async function getPublicActivity(slug: string) {
 }
 
 export function mapPublicCity(city: PublicCity): TravelCity {
-  const imageUrl = city.imageFile?.url ?? cityImageBySlug[city.slug] ?? placeholderImage;
+  const imageUrl =
+    city.imageUrl ?? city.imageFile?.url ?? cityImageBySlug[city.slug] ?? placeholderImage;
   const country = city.destination?.breadcrumb?.[0]?.name ?? city.country;
 
   return {
@@ -353,5 +355,7 @@ const cityImageBySlug: Record<string, string> = {
   paris: "https://images.unsplash.com/photo-1502602898657-3e91760cbb34?auto=format&fit=crop&w=900&q=85",
   zurich: "https://images.unsplash.com/photo-1527668752968-14dc70a27c95?auto=format&fit=crop&w=900&q=85",
   dubai: "https://images.unsplash.com/photo-1512453979798-5ea266f8880c?auto=format&fit=crop&w=900&q=85",
-  "cape-town": "https://images.unsplash.com/photo-1580060839134-75a5edca2e99?auto=format&fit=crop&w=900&q=85"
+  "cape-town": "https://images.unsplash.com/photo-1580060839134-75a5edca2e99?auto=format&fit=crop&w=900&q=85",
+  istanbul:
+    "https://images.unsplash.com/photo-1524231757912-21f4fe3a7200?auto=format&fit=crop&w=900&q=85"
 };

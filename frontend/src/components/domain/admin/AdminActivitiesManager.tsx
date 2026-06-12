@@ -1697,7 +1697,7 @@ function AdminExperienceOptionsSection({
                   {option.availabilityMode === "ALWAYS_AVAILABLE" ? (
                     <p className="rounded-travel-md bg-travel-bg px-3 py-3 text-sm text-travel-muted">
                       Days: {(option.availableDays ?? []).join(", ") || "Every day"} · Daily capacity: {option.dailyCapacity ?? "Open"}
-                      {option.meetingTimes?.length ? ` · Times: ${option.meetingTimes.map(formatOptionMeetingTime).join(", ")}` : ""}
+                      {option.meetingTimes?.length ? ` · Times: ${option.meetingTimes.join(", ")}` : ""}
                     </p>
                   ) : option.availability.length ? (
                     <div className="grid gap-2">
@@ -2409,16 +2409,6 @@ function lines(value: string) {
 
 function parseMeetingTimesInput(value: string) {
   return [...new Set(value.split(/[\n,]/).map((item) => item.trim()).filter(Boolean))];
-}
-
-function formatOptionMeetingTime(value: string) {
-  const [hours, minutes] = value.split(":").map(Number);
-  if (!Number.isFinite(hours) || !Number.isFinite(minutes)) return value;
-  return new Intl.DateTimeFormat("en-US", {
-    hour: "numeric",
-    minute: "2-digit",
-    timeZone: "UTC"
-  }).format(new Date(Date.UTC(2026, 0, 1, hours, minutes)));
 }
 
 function parseOptionalJson(value: string) {

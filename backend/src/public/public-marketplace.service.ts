@@ -102,16 +102,47 @@ export class PublicMarketplaceService {
   constructor(private readonly prisma: PrismaService) {}
 
   async listCities() {
-    const cities = await this.prisma.city.findMany({
-      where: { isActive: true },
+    const destinations = await this.prisma.destination.findMany({
+      where: {
+        isActive: true,
+        type: { in: [DestinationType.REGION, DestinationType.CITY] },
+        parent: {
+          is: {
+            isActive: true,
+            type: DestinationType.COUNTRY
+          }
+        }
+      },
+      include: destinationParentInclude(4),
       orderBy: [{ sortOrder: "asc" }, { name: "asc" }]
     });
-    const counts = await this.publishedCountsByCity();
 
-    return cities.map((city) => ({
-      ...city,
-      activityCount: counts.get(city.id) ?? 0
-    }));
+    const publicDestinations = await Promise.all(
+      destinations.map(async (destination) => {
+        const destinationIds = await this.getDestinationAndDescendantIds(destination.id);
+        const activityCount = await this.prisma.activity.count({
+          where: {
+            OR: [publishedPricingWhere()],
+            status: ActivityStatus.PUBLISHED,
+            destinationId: { in: destinationIds }
+          }
+        });
+
+        return {
+          id: destination.id,
+          name: destination.name,
+          slug: destination.slug,
+          country: getDestinationBreadcrumb(destination)[0]?.name ?? destination.name,
+          description: destination.description,
+          imageUrl: destination.imageUrl,
+          imageFile: destination.imageUrl ? { url: destination.imageUrl } : null,
+          destination: withDestinationBreadcrumb(destination),
+          activityCount
+        };
+      })
+    );
+
+    return publicDestinations.filter((destination) => destination.activityCount > 0);
   }
 
   async getCity(slug: string) {
@@ -136,7 +167,8 @@ export class PublicMarketplaceService {
         slug: destination.slug,
         country: getDestinationBreadcrumb(destination)[0]?.name ?? destination.name,
         description: destination.description,
-        imageFile: null,
+        imageUrl: destination.imageUrl,
+        imageFile: destination.imageUrl ? { url: destination.imageUrl } : null,
         destination: withDestinationBreadcrumb(destination),
         activityCount
       };

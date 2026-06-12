@@ -19,7 +19,15 @@
     "import:packages": "tsx prisma/importers/import-packages.ts",
     "import:vendors": "tsx prisma/importers/import-vendors.ts",
     "import:packages:1-4": "tsx prisma/importers/import-packages-1-4.ts",
-    "seed:nusa-penida": "tsx prisma/seed-nusa-penida.ts"
+    "seed:nusa-penida": "tsx prisma/seed-nusa-penida.ts",
+    "seed:yoga-ubud": "tsx prisma/seed-yoga-ubud.ts",
+    "seed:kintamani-mount-batur": "tsx prisma/seed-kintamani-mount-batur.ts",
+    "seed:gwk-kecak": "tsx prisma/seed-gwk-kecak.ts",
+    "seed:demo-batch-01": "tsx prisma/seed-demo-batch-01.ts",
+    "seed:demo-batch-02": "tsx prisma/seed-demo-batch-02.ts",
+    "seed:demo-batch-03": "tsx prisma/seed-demo-batch-03.ts",
+    "seed:demo-batch-04": "tsx prisma/seed-demo-batch-04.ts",
+    "seed:demo-batch-05": "tsx prisma/seed-demo-batch-05.ts"
   },
   "prisma": {
     "seed": "ts-node prisma/seed.ts"

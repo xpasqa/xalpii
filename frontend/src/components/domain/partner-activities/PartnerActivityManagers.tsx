@@ -2348,23 +2348,13 @@ function getOptionFromPriceLabel(option: PartnerActivityOption) {
 
 function getOptionAvailabilitySummary(option: PartnerActivityOption) {
   if (option.availabilityMode === "ALWAYS_AVAILABLE") {
-    const meetingTimes = option.meetingTimes?.length ? ` · Times ${option.meetingTimes.map(formatOptionMeetingTime).join(", ")}` : "";
+    const meetingTimes = option.meetingTimes?.length ? ` · Times ${option.meetingTimes.join(", ")}` : "";
     return `Every day${option.dailyCapacity ? ` · Capacity ${option.dailyCapacity}` : ""}${meetingTimes}`;
   }
 
   return option.availability.length
     ? `${option.availability.length} scheduled session${option.availability.length === 1 ? "" : "s"}`
     : "No scheduled sessions";
-}
-
-function formatOptionMeetingTime(value: string) {
-  const [hours, minutes] = value.split(":").map(Number);
-  if (!Number.isFinite(hours) || !Number.isFinite(minutes)) return value;
-  return new Intl.DateTimeFormat("en-US", {
-    hour: "numeric",
-    minute: "2-digit",
-    timeZone: "UTC"
-  }).format(new Date(Date.UTC(2026, 0, 1, hours, minutes)));
 }
 
 function PricingSection({

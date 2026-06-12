@@ -315,7 +315,7 @@ export function CheckoutManager({
     travelers.every((traveler) => traveler.firstName.trim() && traveler.lastName.trim()) &&
     (pickupPreference === "later" || pickupAddress.trim().length > 2);
   const bookingDateLabel = isAlwaysAvailable
-    ? [formatCheckoutDate(selectedDate), meetingTime ? formatCheckoutMeetingTime(meetingTime) : ""].filter(Boolean).join(" · ")
+    ? [formatCheckoutDate(selectedDate), meetingTime ?? ""].filter(Boolean).join(" · ")
     : selectedAvailability
       ? formatDate(selectedAvailability.startDateTime, "en-US", {
           dateStyle: "medium",
@@ -1180,16 +1180,6 @@ function formatCheckoutDate(value: string) {
   }).format(date);
 }
 
-function formatCheckoutMeetingTime(value: string) {
-  const [hours, minutes] = value.split(":").map(Number);
-  if (!Number.isFinite(hours) || !Number.isFinite(minutes)) return value;
-  return new Intl.DateTimeFormat("en-US", {
-    hour: "numeric",
-    minute: "2-digit",
-    timeZone: "UTC"
-  }).format(new Date(Date.UTC(2026, 0, 1, hours, minutes)));
-}
-
 function formatCancellationDeadline({
   availabilityStartDateTime,
   selectedDate
@@ -1372,7 +1362,7 @@ export function UserBookingDetailManager({ bookingId }: { bookingId: string }) {
             {booking.travelDate ? (
               <SummaryLine
                 label="Travel date"
-                value={[formatCheckoutDate(booking.travelDate.slice(0, 10)), booking.meetingTime ? formatCheckoutMeetingTime(booking.meetingTime) : ""]
+                value={[formatCheckoutDate(booking.travelDate.slice(0, 10)), booking.meetingTime ?? ""]
                   .filter(Boolean)
                   .join(" · ")}
               />
