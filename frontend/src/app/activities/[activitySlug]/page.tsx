@@ -12,7 +12,6 @@ import {
 } from "../../../components/domain/public";
 import { PublicShell } from "../../../components/layout";
 import { EmptyState, FooterAwareFixedPanel } from "../../../components/ui";
-import { getActivityBySlug } from "../../../data/mock-travel";
 import { getPublicActivity, mapPublicActivity } from "../../../lib/public-marketplace";
 
 type ActivityPageProps = {
@@ -30,7 +29,7 @@ export default async function ActivityPage({ params }: ActivityPageProps) {
       <PublicShell>
         <main className="mx-auto max-w-3xl px-4 py-20 sm:px-6 lg:px-8">
           <EmptyState
-            description="This activity is not in the Sprint 1 mock dataset yet."
+            description="This activity is not available in the marketplace."
             title="Activity not found"
           />
         </main>
@@ -74,6 +73,6 @@ async function loadActivityData(activitySlug: string) {
   try {
     return mapPublicActivity(await getPublicActivity(activitySlug));
   } catch {
-    return getActivityBySlug(activitySlug);
+    return null;
   }
 }

@@ -3,7 +3,7 @@
 import { Search } from "lucide-react";
 import { useRouter } from "next/navigation";
 import { useMemo, useState } from "react";
-import { activities, cities } from "../../../data/mock-travel";
+import { cities } from "../../../data/mock-travel";
 import { routes } from "../../../lib/routes";
 
 type PublicSearchBarProps = {
@@ -18,7 +18,7 @@ type SearchResult = {
   meta: string;
   priority: number;
   searchText: string;
-  type: "Activity" | "Destination" | "Region" | "Category";
+  type: "Destination" | "Region";
 };
 
 export function PublicSearchBar({ compact = false, placeholder = "Where are you going?" }: PublicSearchBarProps) {
@@ -59,7 +59,7 @@ export function PublicSearchBar({ compact = false, placeholder = "Where are you 
     >
       <Search className={`${compact ? "size-4" : "ml-4 size-5"} shrink-0 text-travel-muted`} />
       <input
-        aria-label="Search destinations, activities, regions, or categories"
+        aria-label="Search destinations or regions"
         autoComplete="off"
         className={[
           "min-w-0 flex-1 bg-transparent font-interface text-travel-dark outline-none placeholder:text-travel-muted/75",
@@ -153,42 +153,6 @@ function searchMarketplace(rawQuery: string): SearchResult[] {
       priority: scoreMatch(query, [region, value.city.country, value.city.name], 95),
       searchText: [region, value.city.country, value.city.name].join(" "),
       type: "Region"
-    });
-  });
-
-  activities.forEach((activity) => {
-    results.push({
-      href: routes.activity(activity.slug),
-      imageUrl: activity.imageUrl,
-      label: activity.title,
-      meta: `${activity.city}, ${activity.country} · ${activity.category}`,
-      priority: scoreMatch(
-        query,
-        [activity.title, activity.city, activity.country, activity.category, activity.location, activity.summary],
-        110
-      ),
-      searchText: [activity.title, activity.city, activity.country, activity.category, activity.location, activity.summary].join(" "),
-      type: "Activity"
-    });
-  });
-
-  const categories = new Map<string, { citySlug: string; count: number }>();
-  activities.forEach((activity) => {
-    const current = categories.get(activity.category);
-    categories.set(activity.category, {
-      citySlug: current?.citySlug ?? activity.citySlug,
-      count: (current?.count ?? 0) + 1
-    });
-  });
-  categories.forEach((value, category) => {
-    results.push({
-      href: routes.city(value.citySlug),
-      imageUrl: cities.find((city) => city.slug === value.citySlug)?.imageUrl ?? cities[0]?.imageUrl ?? "",
-      label: category,
-      meta: `${value.count} activity${value.count === 1 ? "" : "ies"}`,
-      priority: scoreMatch(query, [category], 90),
-      searchText: category,
-      type: "Category"
     });
   });
 
