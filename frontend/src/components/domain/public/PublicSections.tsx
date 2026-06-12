@@ -64,6 +64,38 @@ export function FeaturedCities({ cities }: { cities: TravelCity[] }) {
   );
 }
 
+export function DestinationGrid({ cities }: { cities: TravelCity[] }) {
+  return (
+    <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
+      {cities.map((city) => (
+        <Link
+          className="group relative min-h-[300px] overflow-hidden rounded-travel-lg bg-travel-dark shadow-sm transition duration-300 hover:-translate-y-0.5 hover:shadow-[0_18px_36px_rgba(26,26,26,0.14)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-travel-primary/30 focus-visible:ring-offset-2"
+          href={routes.city(city.slug)}
+          key={city.slug}
+        >
+          <img
+            alt={`${city.name}, ${city.country}`}
+            className="absolute inset-0 size-full object-cover transition duration-700 ease-out group-hover:scale-[1.07]"
+            src={city.imageUrl}
+          />
+          <div className="absolute inset-0 bg-gradient-to-b from-black/5 via-black/20 to-black/90" />
+          <div className="absolute inset-x-0 bottom-0 p-5 text-white">
+            <p className="font-interface text-xs font-semibold uppercase tracking-[0.08em] text-white/72">
+              {city.country}
+            </p>
+            <h2 className="mt-1 font-brand text-2xl font-bold leading-tight text-white">
+              {city.name}
+            </h2>
+            <p className="mt-1 font-interface text-sm font-medium text-white/82">
+              {city.activityCount} {city.activityCount === 1 ? "activity" : "activities"}
+            </p>
+          </div>
+        </Link>
+      ))}
+    </div>
+  );
+}
+
 export function CategoryChips() {
   return (
     <section className="border-y border-travel-border bg-white">
@@ -296,9 +328,19 @@ export function SiteFooter() {
             <p className="font-interface text-sm font-semibold text-white">{title}</p>
             <div className="mt-3 space-y-2">
               {links.map((link) => (
-                <a className="block font-interface text-sm text-white/62 transition hover:text-white" href="/" key={link}>
+                <Link
+                  className="block font-interface text-sm text-white/62 transition hover:text-white"
+                  href={
+                    link === "Places to see"
+                      ? routes.destinations
+                      : link === "Things to do"
+                        ? routes.activities
+                        : "/"
+                  }
+                  key={link}
+                >
                   {link}
-                </a>
+                </Link>
               ))}
             </div>
           </div>

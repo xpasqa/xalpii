@@ -59,12 +59,12 @@ export function PublicShell({ children }: PublicShellProps) {
                   showSearch ? "pointer-events-none -translate-y-1 opacity-0" : "translate-y-0 opacity-100"
                 ].join(" ")}
               >
-                <Link className="border-b-2 border-transparent py-2 transition hover:border-travel-primary hover:text-travel-primary" href={routes.city("bali")}>
+                <Link className="border-b-2 border-transparent py-2 transition hover:border-travel-primary hover:text-travel-primary" href={routes.destinations}>
                   Destinations
                 </Link>
                 <Link
                   className="border-b-2 border-transparent py-2 transition hover:border-travel-primary hover:text-travel-primary"
-                  href={routes.activity("ubud-cooking-class-market-visit")}
+                  href={routes.activities}
                 >
                   Activities
                 </Link>

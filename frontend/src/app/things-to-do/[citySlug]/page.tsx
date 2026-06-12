@@ -7,7 +7,6 @@ import {
   TrustHighlights
 } from "../../../components/domain/public";
 import { PublicShell } from "../../../components/layout";
-import { getActivitiesByCity, getCityBySlug } from "../../../data/mock-travel";
 import {
   getPublicActivities,
   getPublicCity,
@@ -66,11 +65,9 @@ async function loadCityData(citySlug: string) {
       activities: publicActivities.map(mapPublicActivity)
     };
   } catch {
-    const city = getCityBySlug(citySlug);
-
     return {
-      city,
-      activities: city ? getActivitiesByCity(city.slug) : []
+      city: undefined,
+      activities: []
     };
   }
 }

@@ -118,11 +118,21 @@ export type PublicActivity = {
 };
 
 export async function getPublicCities() {
-  return requireData(await apiFetch<PublicCity[]>({ path: "/public/cities" }));
+  return requireData(
+    await apiFetch<PublicCity[]>({
+      path: "/public/cities",
+      cache: "no-store"
+    })
+  );
 }
 
 export async function getPublicCity(slug: string) {
-  return requireData(await apiFetch<PublicCity>({ path: `/public/cities/${slug}` }));
+  return requireData(
+    await apiFetch<PublicCity>({
+      path: `/public/cities/${slug}`,
+      cache: "no-store"
+    })
+  );
 }
 
 export async function getPublicActivities(query: {
@@ -133,13 +143,19 @@ export async function getPublicActivities(query: {
 } = {}) {
   return requireData(
     await apiFetch<PublicActivity[]>({
-      path: `/public/activities${buildQuery(query)}`
+      path: `/public/activities${buildQuery(query)}`,
+      cache: "no-store"
     })
   );
 }
 
 export async function getPublicActivity(slug: string) {
-  return requireData(await apiFetch<PublicActivity>({ path: `/public/activities/${slug}` }));
+  return requireData(
+    await apiFetch<PublicActivity>({
+      path: `/public/activities/${slug}`,
+      cache: "no-store"
+    })
+  );
 }
 
 export function mapPublicCity(city: PublicCity): TravelCity {

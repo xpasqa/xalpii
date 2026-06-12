@@ -6,7 +6,6 @@ import {
   TopTravelLinksSection
 } from "../components/domain/public";
 import { PublicShell } from "../components/layout";
-import { cities, getFeaturedActivities } from "../data/mock-travel";
 import {
   getPublicActivities,
   getPublicCities,
@@ -45,8 +44,8 @@ async function loadHomeData() {
     };
   } catch {
     return {
-      featuredCities: cities,
-      featuredActivities: getFeaturedActivities(12)
+      featuredCities: [],
+      featuredActivities: []
     };
   }
 }
