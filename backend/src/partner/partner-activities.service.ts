@@ -400,6 +400,7 @@ export class PartnerActivitiesService {
         durationLabel: normalizeNullable(dto.durationLabel),
         isActive: dto.isActive ?? true,
         meetingPoint: normalizeNullable(dto.meetingPoint),
+        meetingTimes: normalizeMeetingTimes(dto.meetingTimes),
         slug,
         sortOrder: dto.sortOrder ?? 0,
         title: dto.title.trim()
@@ -445,6 +446,8 @@ export class PartnerActivitiesService {
         isActive: dto.isActive,
         meetingPoint:
           dto.meetingPoint !== undefined ? normalizeNullable(dto.meetingPoint) : undefined,
+        meetingTimes:
+          dto.meetingTimes !== undefined ? normalizeMeetingTimes(dto.meetingTimes) : undefined,
         slug,
         sortOrder: dto.sortOrder,
         title: dto.title?.trim()
@@ -1145,6 +1148,22 @@ function normalizeAvailableDays(value?: string[]) {
   }
 
   return days as Prisma.InputJsonValue;
+}
+
+function normalizeMeetingTimes(value?: string[]) {
+  if (value === undefined) return undefined;
+  const times = [...new Set(value.map((item) => item.trim()).filter(Boolean))];
+  const invalid = times.filter((item) => !/^([01]\d|2[0-3]):[0-5]\d$/.test(item));
+
+  if (invalid.length) {
+    throw new BadRequestException({
+      code: "ACTIVITY_OPTION_MEETING_TIMES_INVALID",
+      message: "Meeting times must use HH:mm format",
+      details: { invalid }
+    });
+  }
+
+  return times as Prisma.InputJsonValue;
 }
 
 function normalizePricingTiers(

@@ -357,6 +357,7 @@ model ActivityOption {
   description      String?
   durationLabel    String?          @map("duration_label")
   meetingPoint     String?          @map("meeting_point")
+  meetingTimes     Json?            @map("meeting_times")
   availabilityMode AvailabilityMode @default(SCHEDULED_SESSIONS) @map("availability_mode")
   availableDays    Json?            @map("available_days")
   dailyCapacity    Int?             @map("daily_capacity")
@@ -466,6 +467,7 @@ model Booking {
   optionId           String?       @map("option_id") @db.Uuid
   availabilityId     String?       @map("availability_id") @db.Uuid
   travelDate         DateTime?     @map("travel_date")
+  meetingTime        String?       @map("meeting_time")
   status             BookingStatus @default(PENDING_PAYMENT)
   currency           String
   totalAmountCents   Int           @map("total_amount_cents")

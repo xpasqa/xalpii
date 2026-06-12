@@ -58,6 +58,7 @@ export type Booking = {
   optionId?: string | null;
   availabilityId?: string | null;
   travelDate?: string | null;
+  meetingTime?: string | null;
   status: BookingStatus;
   currency: string;
   totalAmountCents: number;
@@ -98,6 +99,7 @@ export type VoucherValidationResult = BookingVoucher & {
 export async function createBooking(input: {
   activityId: string;
   availabilityId?: string;
+  meetingTime?: string;
   optionId?: string;
   selectedDate?: string;
   participants: Array<{

@@ -173,6 +173,7 @@ export class BookingsService {
 
     let availability: Awaited<ReturnType<typeof this.prisma.activityAvailability.findFirst>> = null;
     let travelDate: Date | null = null;
+    let meetingTime: string | null = null;
     let alwaysAvailableInventory:
       | {
           capacity: number;
@@ -190,6 +191,7 @@ export class BookingsService {
       }
       travelDate = normalizeTravelDate(dto.selectedDate);
       assertAllowedTravelDay(travelDate, selectedOption.availableDays);
+      meetingTime = normalizeSelectedMeetingTime(dto.meetingTime, selectedOption.meetingTimes);
 
       if (selectedOption.dailyCapacity && totalQuantity > selectedOption.dailyCapacity) {
         throw new BadRequestException({
@@ -364,6 +366,7 @@ export class BookingsService {
           availabilityId: availability?.id,
           optionId: selectedOption?.id,
           travelDate,
+          meetingTime,
           currency: BASE_CURRENCY,
           partnerPayoutCents,
           platformFeeCents,
@@ -402,6 +405,7 @@ export class BookingsService {
             pricingMode: activity.pricingMode,
             pricingTierId: tier?.id,
             optionId: selectedOption?.id,
+            meetingTime,
             travelDate: travelDate?.toISOString(),
             totalAmountCents
           }
@@ -846,4 +850,31 @@ function assertAllowedTravelDay(date: Date, availableDays: Prisma.JsonValue | nu
       message: "Selected date is not available for this package option"
     });
   }
+}
+
+function normalizeSelectedMeetingTime(value: string | undefined, availableMeetingTimes: Prisma.JsonValue | null) {
+  const configuredTimes = Array.isArray(availableMeetingTimes)
+    ? availableMeetingTimes.filter((item): item is string => typeof item === "string")
+    : [];
+
+  if (!configuredTimes.length) {
+    return value?.trim() || null;
+  }
+
+  const normalized = value?.trim();
+  if (!normalized) {
+    throw new BadRequestException({
+      code: "BOOKING_MEETING_TIME_REQUIRED",
+      message: "Select a meeting time for this package option"
+    });
+  }
+
+  if (!/^([01]\d|2[0-3]):[0-5]\d$/.test(normalized) || !configuredTimes.includes(normalized)) {
+    throw new BadRequestException({
+      code: "BOOKING_MEETING_TIME_UNAVAILABLE",
+      message: "Selected meeting time is not available for this package option"
+    });
+  }
+
+  return normalized;
 }

@@ -43,6 +43,10 @@ export class CreateBookingDto {
   @IsDateString()
   selectedDate?: string;
 
+  @IsOptional()
+  @IsString()
+  meetingTime?: string;
+
   @IsArray()
   @ValidateNested({ each: true })
   @Type(() => BookingParticipantDto)

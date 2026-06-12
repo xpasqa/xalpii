@@ -17,6 +17,7 @@ export type TravelActivityOption = {
   description?: string | null;
   durationLabel?: string | null;
   meetingPoint?: string | null;
+  meetingTimes?: string[] | null;
   availabilityMode: "SCHEDULED_SESSIONS" | "ALWAYS_AVAILABLE";
   availableDays?: string[] | null;
   dailyCapacity?: number | null;

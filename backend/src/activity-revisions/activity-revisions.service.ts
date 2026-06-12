@@ -385,6 +385,7 @@ export class ActivityRevisionsService {
         isActive: option.isActive,
         isDefault: option.isDefault,
         meetingPoint: option.meetingPoint,
+        meetingTimes: option.meetingTimes,
         pricingTiers: option.pricingTiers.map(optionPricingTierSnapshot),
         slug: option.slug,
         sortOrder: option.sortOrder,
@@ -529,6 +530,7 @@ export class ActivityRevisionsService {
           isActive: Boolean(record.isActive ?? true),
           isDefault: Boolean(record.isDefault ?? false),
           meetingPoint: nullableString(record.meetingPoint),
+          meetingTimes: (record.meetingTimes ?? undefined) as Prisma.InputJsonValue | undefined,
           slug: String(record.slug ?? record.title ?? "option").trim(),
           sortOrder: Number(record.sortOrder ?? 0),
           title: String(record.title ?? "Option").trim()

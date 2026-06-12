@@ -744,12 +744,15 @@ function InlinePackageOption({
 }) {
   const totalTravelers = adults + children;
   const unitPrice = Math.round(item.estimate.totalAmountCents / Math.max(totalTravelers, 1));
+  const meetingTimes = Array.isArray(item.option.meetingTimes) ? item.option.meetingTimes : [];
+  const [selectedMeetingTime, setSelectedMeetingTime] = useState(meetingTimes[0] ?? "");
   const checkoutHref = packageCheckoutHref({
     activity,
     adults,
     children,
     item,
     selectedDate,
+    selectedMeetingTime,
     selectedSession
   });
 
@@ -816,6 +819,29 @@ function InlinePackageOption({
                 {item.option.dailyCapacity ? <span>Daily capacity {item.option.dailyCapacity}</span> : null}
               </div>
             </div>
+
+            {item.option.availabilityMode === "ALWAYS_AVAILABLE" && meetingTimes.length ? (
+              <div className="space-y-2">
+                <p className="font-interface text-sm font-semibold leading-5 text-travel-dark">Meeting time</p>
+                <div className="flex flex-wrap gap-2">
+                  {meetingTimes.map((time) => (
+                    <button
+                      className={[
+                        "rounded-[10px] border px-4 py-2 font-interface text-sm font-semibold transition",
+                        selectedMeetingTime === time
+                          ? "border-travel-primary bg-travel-primary text-white"
+                          : "border-travel-primary bg-white text-travel-primary hover:bg-[#FBEAE8]"
+                      ].join(" ")}
+                      key={time}
+                      onClick={() => setSelectedMeetingTime(time)}
+                      type="button"
+                    >
+                      {formatMeetingTime(time)}
+                    </button>
+                  ))}
+                </div>
+              </div>
+            ) : null}
 
             {item.option.availabilityMode === "SCHEDULED_SESSIONS" && item.sessions.length > 1 ? (
               <div className="flex flex-wrap gap-2">
@@ -1024,6 +1050,7 @@ function getAvailablePackages({
           isActive: true,
           isDefault: true,
           meetingPoint: activity.meetingPoint,
+          meetingTimes: [],
           pricingTiers: activity.pricingTiers ?? [],
           slug: activity.slug,
           sortOrder: 0,
@@ -1084,6 +1111,7 @@ function packageCheckoutHref({
   children,
   item,
   selectedDate,
+  selectedMeetingTime,
   selectedSession
 }: {
   activity: TravelActivity;
@@ -1091,6 +1119,7 @@ function packageCheckoutHref({
   children: number;
   item: AvailablePackage;
   selectedDate: string;
+  selectedMeetingTime?: string;
   selectedSession: TravelActivityAvailability | null;
 }) {
   return `${routes.checkout(activity.slug)}?${new URLSearchParams({
@@ -1098,11 +1127,23 @@ function packageCheckoutHref({
     children: String(children),
     optionId: item.option.id,
     ...(item.option.availabilityMode === "ALWAYS_AVAILABLE"
-      ? { selectedDate }
+      ? {
+          selectedDate,
+          ...(selectedMeetingTime ? { meetingTime: selectedMeetingTime } : {})
+        }
       : selectedSession
       ? { availabilityId: selectedSession.id }
       : {})
   }).toString()}`;
+}
+
+function formatMeetingTime(value: string) {
+  const [hours, minutes] = value.split(":").map(Number);
+  if (!Number.isFinite(hours) || !Number.isFinite(minutes)) return value;
+  return new Intl.DateTimeFormat("en-US", {
+    hour: "numeric",
+    minute: "2-digit"
+  }).format(new Date(Date.UTC(2026, 0, 1, hours, minutes)));
 }
 
 function todayInputValue() {

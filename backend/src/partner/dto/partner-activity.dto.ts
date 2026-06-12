@@ -296,6 +296,11 @@ export class CreatePartnerActivityOptionDto {
   meetingPoint?: string;
 
   @IsOptional()
+  @IsArray()
+  @IsString({ each: true })
+  meetingTimes?: string[];
+
+  @IsOptional()
   @IsEnum(AvailabilityMode)
   availabilityMode?: AvailabilityMode;
 
@@ -344,6 +349,11 @@ export class UpdatePartnerActivityOptionDto {
   @IsOptional()
   @IsString()
   meetingPoint?: string;
+
+  @IsOptional()
+  @IsArray()
+  @IsString({ each: true })
+  meetingTimes?: string[];
 
   @IsOptional()
   @IsEnum(AvailabilityMode)

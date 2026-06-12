@@ -152,6 +152,7 @@ type OptionModalState = {
   description: string;
   durationLabel: string;
   meetingPoint: string;
+  meetingTimes: string;
   availabilityMode: AvailabilityMode;
   availableDays: string[];
   dailyCapacity: string;
@@ -863,6 +864,7 @@ export function PartnerActivityEditManager({ activityId }: { activityId: string 
                   durationLabel: "",
                   isActive: true,
                   meetingPoint: "",
+                  meetingTimes: "07:00, 08:00, 09:00",
                   slug: "",
                   sortOrder: String((activity.options?.length ?? 0) + 1),
                   title: ""
@@ -878,6 +880,7 @@ export function PartnerActivityEditManager({ activityId }: { activityId: string 
                   id: option.id,
                   isActive: option.isActive,
                   meetingPoint: option.meetingPoint ?? "",
+                  meetingTimes: (option.meetingTimes ?? []).join(", "),
                   slug: option.slug,
                   sortOrder: String(option.sortOrder ?? 0),
                   title: option.title
@@ -1007,6 +1010,7 @@ export function PartnerActivityEditManager({ activityId }: { activityId: string 
             durationLabel: modal.durationLabel,
             isActive: modal.isActive,
             meetingPoint: modal.meetingPoint,
+            meetingTimes: parseMeetingTimesInput(modal.meetingTimes),
             slug: modal.slug || undefined,
             sortOrder: Number(modal.sortOrder || 0),
             title: modal.title
@@ -1832,7 +1836,8 @@ function RevisionOptionsSnapshotSection({
         ...option,
         pricingTiers: option.pricingTiers.map((tier) => ({ ...tier })),
         availability: option.availability.map((slot) => ({ ...slot })),
-        availableDays: [...(option.availableDays ?? [])]
+        availableDays: [...(option.availableDays ?? [])],
+        meetingTimes: [...(option.meetingTimes ?? [])]
       });
       return;
     }
@@ -1851,6 +1856,7 @@ function RevisionOptionsSnapshotSection({
       isActive: true,
       isDefault: options.length === 0,
       meetingPoint: "",
+      meetingTimes: ["07:00", "08:00", "09:00"],
       pricingTiers: [],
       slug: "",
       sortOrder: options.length + 1,
@@ -2087,6 +2093,13 @@ function RevisionOptionsSnapshotSection({
                 <Input
                   onChange={(event) => updateDraft({ meetingPoint: event.target.value || null })}
                   value={optionDraft.meetingPoint ?? ""}
+                />
+              </Field>
+              <Field label="Meeting times">
+                <Input
+                  onChange={(event) => updateDraft({ meetingTimes: parseMeetingTimesInput(event.target.value) })}
+                  placeholder="07:00, 08:00, 09:00"
+                  value={(optionDraft.meetingTimes ?? []).join(", ")}
                 />
               </Field>
             </div>
@@ -2335,12 +2348,23 @@ function getOptionFromPriceLabel(option: PartnerActivityOption) {
 
 function getOptionAvailabilitySummary(option: PartnerActivityOption) {
   if (option.availabilityMode === "ALWAYS_AVAILABLE") {
-    return `Every day${option.dailyCapacity ? ` · Capacity ${option.dailyCapacity}` : ""}`;
+    const meetingTimes = option.meetingTimes?.length ? ` · Times ${option.meetingTimes.map(formatOptionMeetingTime).join(", ")}` : "";
+    return `Every day${option.dailyCapacity ? ` · Capacity ${option.dailyCapacity}` : ""}${meetingTimes}`;
   }
 
   return option.availability.length
     ? `${option.availability.length} scheduled session${option.availability.length === 1 ? "" : "s"}`
     : "No scheduled sessions";
+}
+
+function formatOptionMeetingTime(value: string) {
+  const [hours, minutes] = value.split(":").map(Number);
+  if (!Number.isFinite(hours) || !Number.isFinite(minutes)) return value;
+  return new Intl.DateTimeFormat("en-US", {
+    hour: "numeric",
+    minute: "2-digit",
+    timeZone: "UTC"
+  }).format(new Date(Date.UTC(2026, 0, 1, hours, minutes)));
 }
 
 function PricingSection({
@@ -3350,6 +3374,13 @@ function OptionDialog({
           <Field label="Meeting point override">
             <Input onChange={(event) => setValue({ ...value, meetingPoint: event.target.value })} value={value.meetingPoint} />
           </Field>
+          <Field label="Meeting times">
+            <Input
+              onChange={(event) => setValue({ ...value, meetingTimes: event.target.value })}
+              placeholder="07:00, 08:00, 09:00"
+              value={value.meetingTimes}
+            />
+          </Field>
           {value.availabilityMode === "ALWAYS_AVAILABLE" ? (
             <div className="grid gap-2">
               <p className="text-sm font-semibold text-travel-dark">Available days</p>
@@ -3787,6 +3818,10 @@ function moveItem<T>(items: T[], index: number, direction: -1 | 1) {
   if (target < 0 || target >= next.length) return next;
   [next[index], next[target]] = [next[target], next[index]];
   return next;
+}
+
+function parseMeetingTimesInput(value: string) {
+  return [...new Set(value.split(/[\n,]/).map((item) => item.trim()).filter(Boolean))];
 }
 
 function formatPriceType(value: string) {

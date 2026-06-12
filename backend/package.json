@@ -18,7 +18,8 @@
     "import:zurich": "tsx prisma/importers/import-zurich.ts",
     "import:packages": "tsx prisma/importers/import-packages.ts",
     "import:vendors": "tsx prisma/importers/import-vendors.ts",
-    "import:packages:1-4": "tsx prisma/importers/import-packages-1-4.ts"
+    "import:packages:1-4": "tsx prisma/importers/import-packages-1-4.ts",
+    "seed:nusa-penida": "tsx prisma/seed-nusa-penida.ts"
   },
   "prisma": {
     "seed": "ts-node prisma/seed.ts"

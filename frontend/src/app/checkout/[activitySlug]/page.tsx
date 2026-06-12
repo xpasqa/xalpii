@@ -10,6 +10,7 @@ type CheckoutPageProps = {
     availabilityId?: string;
     adults?: string;
     children?: string;
+    meetingTime?: string;
     optionId?: string;
     selectedDate?: string;
   }>;
@@ -26,6 +27,7 @@ export default async function CheckoutPage({ params, searchParams }: CheckoutPag
         initialAdults={selection.adults}
         initialAvailabilityId={selection.availabilityId}
         initialChildren={selection.children}
+        initialMeetingTime={selection.meetingTime}
         initialOptionId={selection.optionId}
         initialSelectedDate={selection.selectedDate}
       />

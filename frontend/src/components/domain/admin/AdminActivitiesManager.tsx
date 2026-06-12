@@ -139,6 +139,7 @@ type OptionModalState = {
   description: string;
   durationLabel: string;
   meetingPoint: string;
+  meetingTimes: string;
   availabilityMode: AvailabilityMode;
   availableDays: string[];
   dailyCapacity: string;
@@ -638,6 +639,7 @@ export function AdminActivityReviewManager({ activityId }: { activityId: string 
                   durationLabel: "",
                   isActive: true,
                   meetingPoint: "",
+                  meetingTimes: "07:00, 08:00, 09:00",
                   slug: "",
                   sortOrder: String((activity.options?.length ?? 0) + 1),
                   title: ""
@@ -653,6 +655,7 @@ export function AdminActivityReviewManager({ activityId }: { activityId: string 
                   id: option.id,
                   isActive: option.isActive,
                   meetingPoint: option.meetingPoint ?? "",
+                  meetingTimes: (option.meetingTimes ?? []).join(", "),
                   slug: option.slug,
                   sortOrder: String(option.sortOrder ?? 0),
                   title: option.title
@@ -954,6 +957,7 @@ export function AdminActivityReviewManager({ activityId }: { activityId: string 
             durationLabel: modal.durationLabel,
             isActive: modal.isActive,
             meetingPoint: modal.meetingPoint,
+            meetingTimes: parseMeetingTimesInput(modal.meetingTimes),
             slug: modal.slug || undefined,
             sortOrder: Number(modal.sortOrder || 0),
             title: modal.title
@@ -1693,6 +1697,7 @@ function AdminExperienceOptionsSection({
                   {option.availabilityMode === "ALWAYS_AVAILABLE" ? (
                     <p className="rounded-travel-md bg-travel-bg px-3 py-3 text-sm text-travel-muted">
                       Days: {(option.availableDays ?? []).join(", ") || "Every day"} · Daily capacity: {option.dailyCapacity ?? "Open"}
+                      {option.meetingTimes?.length ? ` · Times: ${option.meetingTimes.map(formatOptionMeetingTime).join(", ")}` : ""}
                     </p>
                   ) : option.availability.length ? (
                     <div className="grid gap-2">
@@ -1794,6 +1799,13 @@ function AdminOptionDialog({
           </Field>
           <Field label="Meeting point override">
             <Input onChange={(event) => setValue({ ...value, meetingPoint: event.target.value })} value={value.meetingPoint} />
+          </Field>
+          <Field label="Meeting times">
+            <Input
+              onChange={(event) => setValue({ ...value, meetingTimes: event.target.value })}
+              placeholder="07:00, 08:00, 09:00"
+              value={value.meetingTimes}
+            />
           </Field>
           {value.availabilityMode === "ALWAYS_AVAILABLE" ? (
             <div className="grid gap-2">
@@ -2393,6 +2405,20 @@ function lines(value: string) {
     .split("\n")
     .map((line) => line.trim())
     .filter(Boolean);
+}
+
+function parseMeetingTimesInput(value: string) {
+  return [...new Set(value.split(/[\n,]/).map((item) => item.trim()).filter(Boolean))];
+}
+
+function formatOptionMeetingTime(value: string) {
+  const [hours, minutes] = value.split(":").map(Number);
+  if (!Number.isFinite(hours) || !Number.isFinite(minutes)) return value;
+  return new Intl.DateTimeFormat("en-US", {
+    hour: "numeric",
+    minute: "2-digit",
+    timeZone: "UTC"
+  }).format(new Date(Date.UTC(2026, 0, 1, hours, minutes)));
 }
 
 function parseOptionalJson(value: string) {

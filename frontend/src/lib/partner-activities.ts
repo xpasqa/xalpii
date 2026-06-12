@@ -96,6 +96,7 @@ export type PartnerActivityOption = {
   description?: string | null;
   durationLabel?: string | null;
   meetingPoint?: string | null;
+  meetingTimes?: string[] | null;
   availabilityMode: AvailabilityMode;
   availableDays?: string[] | null;
   dailyCapacity?: number | null;
@@ -210,6 +211,7 @@ export type PartnerActivityOptionInput = {
   description?: string;
   durationLabel?: string;
   meetingPoint?: string;
+  meetingTimes?: string[];
   availabilityMode?: AvailabilityMode;
   availableDays?: string[];
   dailyCapacity?: number;

@@ -68,6 +68,7 @@ export type PublicActivityOption = {
   description?: string | null;
   durationLabel?: string | null;
   meetingPoint?: string | null;
+  meetingTimes?: string[] | null;
   availabilityMode: "SCHEDULED_SESSIONS" | "ALWAYS_AVAILABLE";
   availableDays?: string[] | null;
   dailyCapacity?: number | null;
@@ -194,6 +195,7 @@ export function mapPublicActivity(activity: PublicActivity): TravelActivity {
     options: (activity.options ?? []).map((option) => ({
       ...option,
       availableDays: Array.isArray(option.availableDays) ? option.availableDays : [],
+      meetingTimes: Array.isArray(option.meetingTimes) ? option.meetingTimes : [],
       availability: option.availability ?? [],
       pricingTiers: option.pricingTiers ?? []
     })),

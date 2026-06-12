@@ -65,6 +65,7 @@ type CheckoutManagerProps = {
   initialAdults?: string;
   initialAvailabilityId?: string;
   initialChildren?: string;
+  initialMeetingTime?: string;
   initialOptionId?: string;
   initialSelectedDate?: string;
 };
@@ -80,6 +81,7 @@ export function CheckoutManager({
   initialAdults,
   initialAvailabilityId,
   initialChildren,
+  initialMeetingTime,
   initialOptionId,
   initialSelectedDate
 }: CheckoutManagerProps) {
@@ -100,6 +102,7 @@ export function CheckoutManager({
   const [optionId, setOptionId] = useState(initialOptionId ?? "");
   const [availabilityId, setAvailabilityId] = useState("");
   const [selectedDate, setSelectedDate] = useState(initialSelectedDate ?? todayInputValue());
+  const meetingTime = initialMeetingTime ?? "";
   const [adults, setAdults] = useState(() => clampQuantity(initialAdults, 1, 14, 1));
   const [children, setChildren] = useState(() => clampQuantity(initialChildren, 0, 14, 0));
   const [contact, setContact] = useState({
@@ -126,10 +129,11 @@ export function CheckoutManager({
         activitySlug,
         optionId || "no-option",
         availabilityId || selectedDate || "no-date",
+        meetingTime || "no-time",
         adults,
         children
       ].join(":"),
-    [activitySlug, adults, availabilityId, children, optionId, selectedDate]
+    [activitySlug, adults, availabilityId, children, meetingTime, optionId, selectedDate]
   );
 
   useEffect(() => {
@@ -294,7 +298,14 @@ export function CheckoutManager({
     adults: String(adults),
     children: String(children),
     ...(selectedOption ? { optionId: selectedOption.id } : {}),
-    ...(isAlwaysAvailable ? { selectedDate } : availabilityId ? { availabilityId } : {})
+    ...(isAlwaysAvailable
+      ? {
+          selectedDate,
+          ...(meetingTime ? { meetingTime } : {})
+        }
+      : availabilityId
+        ? { availabilityId }
+        : {})
   }).toString()}`;
   const isAuthenticated = Boolean(currentUser && getAccessToken());
   const contactValidation = validateContact(contact, isAuthenticated);
@@ -304,7 +315,7 @@ export function CheckoutManager({
     travelers.every((traveler) => traveler.firstName.trim() && traveler.lastName.trim()) &&
     (pickupPreference === "later" || pickupAddress.trim().length > 2);
   const bookingDateLabel = isAlwaysAvailable
-    ? formatCheckoutDate(selectedDate)
+    ? [formatCheckoutDate(selectedDate), meetingTime ? formatCheckoutMeetingTime(meetingTime) : ""].filter(Boolean).join(" · ")
     : selectedAvailability
       ? formatDate(selectedAvailability.startDateTime, "en-US", {
           dateStyle: "medium",
@@ -391,6 +402,7 @@ export function CheckoutManager({
       const created = await createBooking({
         activityId: activity.id,
         availabilityId: isAlwaysAvailable ? undefined : availabilityId || undefined,
+        meetingTime: isAlwaysAvailable ? meetingTime || undefined : undefined,
         optionId: selectedOption?.id,
         selectedDate: isAlwaysAvailable ? selectedDate : undefined,
         participants: [
@@ -1168,6 +1180,16 @@ function formatCheckoutDate(value: string) {
   }).format(date);
 }
 
+function formatCheckoutMeetingTime(value: string) {
+  const [hours, minutes] = value.split(":").map(Number);
+  if (!Number.isFinite(hours) || !Number.isFinite(minutes)) return value;
+  return new Intl.DateTimeFormat("en-US", {
+    hour: "numeric",
+    minute: "2-digit",
+    timeZone: "UTC"
+  }).format(new Date(Date.UTC(2026, 0, 1, hours, minutes)));
+}
+
 function formatCancellationDeadline({
   availabilityStartDateTime,
   selectedDate
@@ -1346,6 +1368,15 @@ export function UserBookingDetailManager({ bookingId }: { bookingId: string }) {
           <CardContent className="grid gap-4 md:grid-cols-2">
             <SummaryLine label="Booking status" value={formatStatus(booking.status)} />
             <SummaryLine label="Payment status" value={formatStatus(booking.payment?.status ?? "PENDING")} />
+            {booking.option?.title ? <SummaryLine label="Package" value={booking.option.title} /> : null}
+            {booking.travelDate ? (
+              <SummaryLine
+                label="Travel date"
+                value={[formatCheckoutDate(booking.travelDate.slice(0, 10)), booking.meetingTime ? formatCheckoutMeetingTime(booking.meetingTime) : ""]
+                  .filter(Boolean)
+                  .join(" · ")}
+              />
+            ) : null}
             <SummaryLine label="Participants" value={participantLabel(booking)} />
             <SummaryLine label="Total" value={formatMoney(booking.totalAmountCents, displayCurrency)} />
             {displayCurrency !== "USD" ? (
