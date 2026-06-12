@@ -30,6 +30,7 @@ import {
   Dialog,
   EmptyState,
   ErrorState,
+  FooterAwareFixedPanel,
   Input,
   LoadingState,
   Select
@@ -852,8 +853,8 @@ export function CheckoutManager({
       </section>
 
       <aside className="hidden lg:block lg:w-[390px]" aria-hidden="true" />
-      <div className="pointer-events-none fixed right-[max(2rem,calc((100vw-80rem)/2+2rem))] top-[88px] z-30 hidden w-[390px] lg:block">
-        <div className="pointer-events-auto max-h-[calc(100vh-104px)] overflow-y-auto pb-4">
+      <FooterAwareFixedPanel className="pointer-events-none fixed right-[max(2rem,calc((100vw-80rem)/2+2rem))] z-30 hidden w-[390px] lg:block">
+        <div className="pointer-events-auto max-h-[calc(100vh-104px)] overflow-y-auto overscroll-contain pb-4">
           <Card className="overflow-hidden border-[#2B2B2B]/20 shadow-none">
             <div className="border-b border-[#2B2B2B]/10 bg-[#ffdbdb] px-5 py-3">
               <div className="flex items-center justify-center gap-2 text-sm font-semibold text-travel-dark">
@@ -971,7 +972,7 @@ export function CheckoutManager({
             </CardContent>
           </Card>
         </div>
-      </div>
+      </FooterAwareFixedPanel>
       <Dialog
         bodyClassName="p-3 sm:p-3"
         description="Choose the currency used for displaying this checkout summary."

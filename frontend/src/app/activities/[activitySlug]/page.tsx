@@ -11,7 +11,7 @@ import {
   SiteFooter
 } from "../../../components/domain/public";
 import { PublicShell } from "../../../components/layout";
-import { EmptyState } from "../../../components/ui";
+import { EmptyState, FooterAwareFixedPanel } from "../../../components/ui";
 import { getActivityBySlug } from "../../../data/mock-travel";
 import { getPublicActivity, mapPublicActivity } from "../../../lib/public-marketplace";
 
@@ -58,11 +58,11 @@ export default async function ActivityPage({ params }: ActivityPageProps) {
             <ActivityContentSections activity={activity} />
             <ActivityReviewsSection activitySlug={activity.slug} />
           </div>
-          <aside className="pointer-events-none fixed bottom-8 right-[max(2rem,calc((100vw-80rem)/2+2rem))] top-[88px] z-30 hidden w-[380px] lg:block">
-            <div className="pointer-events-auto h-full overflow-y-auto overscroll-contain pb-4">
+          <FooterAwareFixedPanel className="pointer-events-none fixed right-[max(2rem,calc((100vw-80rem)/2+2rem))] z-30 hidden w-[380px] lg:block">
+            <div className="pointer-events-auto max-h-[calc(100vh-104px)] overflow-y-auto overscroll-contain pb-4">
               <ActivityBookingBox activity={activity} />
             </div>
-          </aside>
+          </FooterAwareFixedPanel>
         </main>
       </ActivityAvailabilityProvider>
       <SiteFooter />

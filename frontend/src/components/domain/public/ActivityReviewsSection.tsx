@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { CheckCircle2, Star } from "lucide-react";
 import {
   getActivityReviews,
@@ -18,10 +18,17 @@ const sortOptions: Array<{ label: string; value: ReviewSort }> = [
 ];
 
 export function ActivityReviewsSection({ activitySlug }: { activitySlug: string }) {
+  const sectionRef = useRef<HTMLElement | null>(null);
+  const summarySlotRef = useRef<HTMLDivElement | null>(null);
   const [data, setData] = useState<PublicReviewsResponse | null>(null);
   const [sort, setSort] = useState<ReviewSort>("featured");
   const [error, setError] = useState<string | null>(null);
   const [isLoading, setIsLoading] = useState(true);
+  const [pinnedSummary, setPinnedSummary] = useState<{
+    left: number;
+    top: number;
+    width: number;
+  } | null>(null);
 
   useEffect(() => {
     let active = true;
@@ -48,8 +55,44 @@ export function ActivityReviewsSection({ activitySlug }: { activitySlug: string 
     };
   }, [activitySlug, sort]);
 
+  useEffect(() => {
+    function updatePinnedSummary() {
+      const section = sectionRef.current;
+      const slot = summarySlotRef.current;
+
+      if (!section || !slot || window.innerWidth < 1024) {
+        setPinnedSummary(null);
+        return;
+      }
+
+      const sectionRect = section.getBoundingClientRect();
+      const slotRect = slot.getBoundingClientRect();
+      const topOffset = 112;
+      const shouldPin = slotRect.top <= topOffset && sectionRect.bottom > topOffset + 24;
+
+      setPinnedSummary(
+        shouldPin
+          ? {
+              left: slotRect.left,
+              top: topOffset,
+              width: slotRect.width
+            }
+          : null
+      );
+    }
+
+    updatePinnedSummary();
+    window.addEventListener("scroll", updatePinnedSummary, { passive: true });
+    window.addEventListener("resize", updatePinnedSummary);
+
+    return () => {
+      window.removeEventListener("scroll", updatePinnedSummary);
+      window.removeEventListener("resize", updatePinnedSummary);
+    };
+  }, [data?.reviewCount]);
+
   return (
-    <section className="border-t border-[#2B2B2B]/20 pt-8" id="reviews">
+    <section className="relative border-t border-[#2B2B2B]/20 pt-8" id="reviews" ref={sectionRef}>
       <div className="mb-6 flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
         <div>
           <h2 className="font-brand text-xl font-semibold text-travel-dark">Reviews</h2>
@@ -74,8 +117,22 @@ export function ActivityReviewsSection({ activitySlug }: { activitySlug: string 
 
       {!isLoading && !error && data ? (
         data.reviewCount ? (
-          <div className="grid gap-8 lg:grid-cols-[280px_1fr]">
-            <ReviewSummary data={data} />
+          <div className="grid gap-8 lg:grid-cols-[280px_minmax(0,1fr)]">
+            <div ref={summarySlotRef} className={pinnedSummary ? "invisible hidden lg:block" : ""}>
+              <ReviewSummary data={data} />
+            </div>
+            {pinnedSummary ? (
+              <div
+                className="fixed z-20 hidden lg:block"
+                style={{
+                  left: pinnedSummary.left,
+                  top: pinnedSummary.top,
+                  width: pinnedSummary.width
+                }}
+              >
+                <ReviewSummary data={data} />
+              </div>
+            ) : null}
             <div className="grid gap-4">
               {data.reviews.map((review) => (
                 <PublicReviewCard key={review.id} review={review} />
@@ -95,7 +152,7 @@ export function ActivityReviewsSection({ activitySlug }: { activitySlug: string 
 
 function ReviewSummary({ data }: { data: PublicReviewsResponse }) {
   return (
-    <aside className="self-start rounded-travel-lg border border-[#2B2B2B]/15 bg-white p-5 lg:sticky lg:top-24">
+    <aside className="rounded-travel-lg border border-[#2B2B2B]/15 bg-white p-5">
       <div className="flex items-end gap-2">
         <span className="font-brand text-4xl font-semibold leading-none text-travel-dark">
           {Number(data.ratingAverage).toFixed(1)}

@@ -7,6 +7,7 @@ export * from "./data-table";
 export * from "./dialog";
 export * from "./empty-state";
 export * from "./error-state";
+export * from "./footer-aware-fixed-panel";
 export * from "./input";
 export * from "./loading-state";
 export * from "./popover";

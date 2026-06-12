@@ -279,7 +279,7 @@ export function PartnerCTASection() {
 
 export function SiteFooter() {
   return (
-    <footer className="border-t border-travel-border bg-travel-dark text-white">
+    <footer className="border-t border-travel-border bg-travel-dark text-white" data-site-footer>
       <div className="mx-auto grid max-w-7xl gap-8 px-4 py-10 sm:px-6 md:grid-cols-[1.2fr_1fr_1fr_1fr] lg:px-8">
         <div>
           <p className="font-brand text-2xl font-bold text-white">Alpii</p>
