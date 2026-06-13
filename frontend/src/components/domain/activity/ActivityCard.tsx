@@ -19,6 +19,8 @@ type ActivityCardProps = {
   currency: CurrencyCode;
   href: string;
   badge?: string;
+  duration?: string;
+  variant?: "grid" | "row";
   isFavorite?: boolean;
   onFavoriteClick?: (id: ID) => void;
 };
@@ -34,6 +36,8 @@ export function ActivityCard({
   price,
   href,
   badge,
+  duration,
+  variant = "grid",
   isFavorite = false,
   onFavoriteClick
 }: ActivityCardProps) {
@@ -41,13 +45,20 @@ export function ActivityCard({
 
   return (
     <Link
-      className="group block overflow-hidden rounded-travel-lg border border-travel-border bg-white shadow-sm transition duration-300 hover:-translate-y-0.5 hover:border-travel-primary/20 hover:shadow-[0_18px_36px_rgba(26,26,26,0.10)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-travel-primary/30 focus-visible:ring-offset-2"
+      className={cn(
+        "group flex h-full flex-col overflow-hidden rounded-travel-lg border border-travel-border bg-white transition-colors duration-300 hover:border-travel-primary/75 active:border-travel-primary focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-travel-primary/60 focus-visible:ring-offset-2"
+      )}
       href={href}
     >
-      <div className="relative aspect-[16/11] overflow-hidden bg-travel-bg">
+      <div
+        className={cn(
+          "relative overflow-hidden bg-travel-bg",
+          variant === "row" ? "aspect-[16/10]" : "aspect-[16/11]"
+        )}
+      >
         <img
           alt={title}
-          className="size-full object-cover transition duration-700 ease-out group-hover:scale-[1.08]"
+          className="size-full object-cover transition-transform duration-700 ease-out group-hover:translate-x-[-1.5%] group-hover:translate-y-[-1%] group-hover:scale-[1.15] group-active:scale-[1.12]"
           src={imageUrl}
         />
         {badge ? (
@@ -55,7 +66,7 @@ export function ActivityCard({
             {badge}
           </span>
         ) : null}
-        <button
+        {variant === "grid" ? <button
           aria-label={isFavorite ? "Remove from favorites" : "Add to favorites"}
           className="absolute right-3 top-3 flex size-8 items-center justify-center rounded-full bg-white/90 text-travel-dark opacity-0 shadow-[0_8px_18px_rgba(26,26,26,0.10)] transition group-hover:opacity-100 hover:bg-white hover:text-travel-primary focus-visible:opacity-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white"
           onClick={(event) => {
@@ -67,19 +78,35 @@ export function ActivityCard({
           <Heart
             className={cn("size-4", isFavorite && "fill-travel-primary text-travel-primary")}
           />
-        </button>
+        </button> : null}
       </div>
 
-      <div className="flex min-h-[128px] flex-col p-3.5">
-        <div className="truncate font-interface text-[12px] font-medium leading-5 text-travel-muted">
-          {category} | {location}
+      <div
+        className={cn(
+          "flex flex-1 flex-col",
+          variant === "row" ? "min-h-[132px] px-3.5 pb-2.5 pt-3" : "min-h-[128px] p-3.5"
+        )}
+      >
+        <div className="truncate font-interface text-[12px] font-semibold leading-4 text-travel-muted">
+          {location} · {category}
         </div>
 
-        <h3 className="mt-1.5 line-clamp-2 min-h-[44px] font-brand text-[16px] font-bold leading-[1.28] text-travel-dark md:text-[17px]">
+        <h3 className="mt-1.5 line-clamp-2 min-h-[41px] font-brand text-[16px] font-bold leading-[1.28] text-travel-dark">
           {title}
         </h3>
 
-        <div className="mt-2 flex items-center justify-between gap-3 font-interface text-xs leading-5 text-travel-muted">
+        {variant === "row" && duration ? (
+          <p className="mt-1.5 line-clamp-1 font-interface text-xs leading-4 text-travel-dark">
+            {duration} · Free cancellation
+          </p>
+        ) : null}
+
+        <div
+          className={cn(
+            "flex items-end justify-between gap-3 font-interface text-xs leading-5 text-travel-muted",
+            variant === "row" ? "mt-1.5 pt-0" : "mt-auto pt-4"
+          )}
+        >
           <span className="inline-flex min-w-0 items-center gap-1">
             <Star className="size-3.5 fill-travel-rating text-travel-rating" />
             <span className="font-semibold text-travel-dark">{rating.toFixed(1)}</span>

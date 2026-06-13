@@ -261,16 +261,23 @@ export class PublicMarketplaceService {
   }
 
   async home() {
-    const [cities, popularActivities, curatedActivities] = await Promise.all([
-      this.listCities(),
-      this.listActivities({ limit: "8" }),
-      this.listActivities({ limit: "12" })
-    ]);
+    const cities = await this.listCities();
+    const activityRows = await Promise.all(
+      cities.map(async (destination) => ({
+        destinationId: destination.id,
+        destinationName: destination.name,
+        destinationSlug: destination.slug,
+        country: destination.country,
+        activities: await this.listActivities({
+          citySlug: destination.slug,
+          limit: "10"
+        })
+      }))
+    );
 
     return {
       cities,
-      popularActivities,
-      curatedActivities
+      activityRows: activityRows.filter((row) => row.activities.length > 0)
     };
   }
 

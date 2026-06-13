@@ -1,31 +1,34 @@
 import {
-  ActivityGrid,
+  DestinationActivityRow,
   FeaturedCities,
   HeroSection,
-  SiteFooter,
-  TopTravelLinksSection
+  SiteFooter
 } from "../components/domain/public";
 import { PublicShell } from "../components/layout";
 import {
-  getPublicActivities,
-  getPublicCities,
+  getPublicHome,
   mapPublicActivity,
   mapPublicCity
 } from "../lib/public-marketplace";
 
 export default async function Home() {
-  const { featuredCities, featuredActivities } = await loadHomeData();
+  const { featuredCities, activityRows } = await loadHomeData();
 
   return (
     <PublicShell>
       <HeroSection />
       <FeaturedCities cities={featuredCities} />
-      <ActivityGrid
-        activities={featuredActivities}
-        showCategories
-        title="Curated activities"
-      />
-      <TopTravelLinksSection />
+      <div className="pb-5">
+        {activityRows.map((row, index) => (
+          <DestinationActivityRow
+            activities={row.activities}
+            destinationName={row.destinationName}
+            destinationSlug={row.destinationSlug}
+            key={row.destinationId}
+            title={rowTitle(index, row.destinationName)}
+          />
+        ))}
+      </div>
       <SiteFooter />
     </PublicShell>
   );
@@ -33,19 +36,32 @@ export default async function Home() {
 
 async function loadHomeData() {
   try {
-    const [publicCities, publicActivities] = await Promise.all([
-      getPublicCities(),
-      getPublicActivities({ limit: 12 })
-    ]);
+    const home = await getPublicHome();
 
     return {
-      featuredCities: publicCities.map(mapPublicCity),
-      featuredActivities: publicActivities.map(mapPublicActivity)
+      featuredCities: home.cities.map(mapPublicCity),
+      activityRows: home.activityRows.map((row) => ({
+        ...row,
+        activities: row.activities.map(mapPublicActivity)
+      }))
     };
   } catch {
     return {
       featuredCities: [],
-      featuredActivities: []
+      activityRows: []
     };
   }
+}
+
+const rowTitles = [
+  "Explore more in",
+  "Dive deeper into",
+  "Continue your search in",
+  "Discover more in",
+  "Popular experiences in",
+  "More ways to explore"
+];
+
+function rowTitle(index: number, destinationName: string) {
+  return `${rowTitles[index % rowTitles.length]} ${destinationName}`;
 }

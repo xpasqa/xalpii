@@ -1,5 +1,5 @@
 import { apiFetch } from "./api";
-import type { TravelActivity, TravelCity } from "../data/mock-travel";
+import type { TravelActivity, TravelCity } from "../types/travel";
 import type { ActivityPricingTier, PricingMode } from "./activity-pricing";
 
 const placeholderImage =
@@ -117,6 +117,26 @@ export type PublicActivity = {
   availability?: PublicActivityAvailability[];
 };
 
+export type PublicHomeData = {
+  cities: PublicCity[];
+  activityRows: Array<{
+    destinationId: string;
+    destinationName: string;
+    destinationSlug: string;
+    country: string;
+    activities: PublicActivity[];
+  }>;
+};
+
+export async function getPublicHome() {
+  return requireData(
+    await apiFetch<PublicHomeData>({
+      path: "/public/home",
+      cache: "no-store"
+    })
+  );
+}
+
 export async function getPublicCities() {
   return requireData(
     await apiFetch<PublicCity[]>({
@@ -217,8 +237,8 @@ export function mapPublicActivity(activity: PublicActivity): TravelActivity {
       availability: option.availability ?? [],
       pricingTiers: option.pricingTiers ?? []
     })),
-    badge: activity.reviewCount > 100 ? "Top rated" : undefined,
-    badgeLabel: activity.reviewCount > 100 ? "Popular choice" : "Curated by Alpii",
+    badge: undefined,
+    badgeLabel: "Curated by Alpii",
     providerName: activity.partner?.businessName ?? "Curated by Alpii",
     summary: activity.shortDescription,
     description: activity.description,

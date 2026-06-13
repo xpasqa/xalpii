@@ -132,6 +132,29 @@ export async function createAdminActivityMedia(id: string, input: PartnerMediaIn
   );
 }
 
+export async function updateAdminActivityMedia(
+  id: string,
+  mediaId: string,
+  input: Omit<PartnerMediaInput, "fileAssetId">
+) {
+  return requireData(
+    await authenticatedFetch<PartnerActivityMedia>({
+      body: JSON.stringify(input),
+      method: "PATCH",
+      path: `/admin/activities/${id}/media/${mediaId}`
+    })
+  );
+}
+
+export async function deleteAdminActivityMedia(id: string, mediaId: string) {
+  return requireData(
+    await authenticatedFetch<PartnerActivityMedia>({
+      method: "DELETE",
+      path: `/admin/activities/${id}/media/${mediaId}`
+    })
+  );
+}
+
 export async function createAdminActivityOption(id: string, input: PartnerActivityOptionInput) {
   return requireData(
     await authenticatedFetch<PartnerActivityOption>({

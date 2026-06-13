@@ -24,7 +24,7 @@ import type {
   TravelActivity,
   TravelActivityAvailability,
   TravelActivityOption
-} from "../../../data/mock-travel";
+} from "../../../types/travel";
 import { formatMoney } from "../../../lib/money";
 import {
   calculatePricingEstimate,

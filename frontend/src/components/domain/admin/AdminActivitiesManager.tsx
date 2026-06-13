@@ -8,9 +8,11 @@ import {
   Archive,
   CheckCircle2,
   Eye,
+  ImageOff,
   Pencil,
   Plus,
   Send,
+  Trash2,
   XCircle
 } from "lucide-react";
 import {
@@ -20,6 +22,7 @@ import {
   createAdminActivityMedia,
   createAdminActivityOption,
   createAdminActivityOptionAvailability,
+  deleteAdminActivityMedia,
   deactivateAdminActivityOption,
   deactivateAdminActivityOptionAvailability,
   getAdminActivities,
@@ -28,6 +31,7 @@ import {
   rejectAdminActivity,
   requestRevisionAdminActivity,
   updateAdminActivity,
+  updateAdminActivityMedia,
   updateAdminActivityOption,
   upsertAdminActivityOptionPricing,
   upsertAdminActivityPricing
@@ -2096,6 +2100,9 @@ function AdminMediaCard({
   const [file, setFile] = useState<File | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [isSaving, setIsSaving] = useState(false);
+  const [brokenMediaIds, setBrokenMediaIds] = useState<Set<string>>(new Set());
+  const [editingMedia, setEditingMedia] = useState<AdminActivity["media"][number] | null>(null);
+  const [deletingMedia, setDeletingMedia] = useState<AdminActivity["media"][number] | null>(null);
 
   async function addUrl(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -2150,46 +2157,261 @@ function AdminMediaCard({
     }
   }
 
+  async function saveMedia(input: {
+    altText: string;
+    isCover: boolean;
+    sortOrder: number;
+    url: string;
+  }) {
+    if (!editingMedia) return;
+    setError(null);
+    setIsSaving(true);
+
+    try {
+      await updateAdminActivityMedia(activity.id, editingMedia.id, input);
+      setEditingMedia(null);
+      setBrokenMediaIds((current) => {
+        const next = new Set(current);
+        next.delete(editingMedia.id);
+        return next;
+      });
+      await onUpdated();
+    } catch (caughtError) {
+      setError(caughtError instanceof Error ? caughtError.message : "Unable to update media");
+    } finally {
+      setIsSaving(false);
+    }
+  }
+
+  async function setCover(item: AdminActivity["media"][number]) {
+    setError(null);
+    setIsSaving(true);
+
+    try {
+      await updateAdminActivityMedia(activity.id, item.id, { isCover: true });
+      await onUpdated();
+    } catch (caughtError) {
+      setError(caughtError instanceof Error ? caughtError.message : "Unable to set cover image");
+    } finally {
+      setIsSaving(false);
+    }
+  }
+
+  async function deleteMedia() {
+    if (!deletingMedia) return;
+    setError(null);
+    setIsSaving(true);
+
+    try {
+      await deleteAdminActivityMedia(activity.id, deletingMedia.id);
+      setDeletingMedia(null);
+      await onUpdated();
+    } catch (caughtError) {
+      setError(caughtError instanceof Error ? caughtError.message : "Unable to delete media");
+    } finally {
+      setIsSaving(false);
+    }
+  }
+
   return (
-    <Card>
-      <CardHeader>
-        <CardTitle>Media</CardTitle>
-        <CardDescription>Add or upload marketplace images for this activity.</CardDescription>
-      </CardHeader>
-      <CardContent>
-        <div className="grid gap-4">
-          <form className="grid gap-3 md:grid-cols-[1fr_auto]" onSubmit={addUrl}>
-            <Input onChange={(event) => setUrl(event.target.value)} placeholder="https:// image URL" value={url} />
-            <ButtonCTA disabled={isSaving || !url.trim()} type="submit" variant="outline">
-              Add URL
-            </ButtonCTA>
-          </form>
-          <div className="flex flex-wrap items-center gap-3">
-            <Input onChange={(event) => setFile(event.target.files?.[0] ?? null)} type="file" />
-            <ButtonCTA disabled={isSaving || !file} onClick={uploadSelectedFile} variant="outline">
-              Upload image
-            </ButtonCTA>
-          </div>
-          <div className="grid gap-3 md:grid-cols-3">
-            {activity.media.map((item) => {
-              const mediaUrl = item.url ?? item.file?.url;
-              return (
-                <div className="overflow-hidden rounded-travel-md border border-travel-border" key={item.id}>
-                  <div className="aspect-[4/3] bg-travel-bg">
-                    {mediaUrl ? <img alt={item.altText ?? ""} className="h-full w-full object-cover" src={mediaUrl} /> : null}
+    <>
+      <Card>
+        <CardHeader>
+          <CardTitle>Media</CardTitle>
+          <CardDescription>Add or manage marketplace image URLs for this activity.</CardDescription>
+        </CardHeader>
+        <CardContent>
+          <div className="grid gap-4">
+            <form className="grid gap-3 md:grid-cols-[1fr_auto]" onSubmit={addUrl}>
+              <Input onChange={(event) => setUrl(event.target.value)} placeholder="https:// image URL" value={url} />
+              <ButtonCTA disabled={isSaving || !url.trim()} type="submit" variant="outline">
+                Add URL
+              </ButtonCTA>
+            </form>
+            <div className="flex flex-wrap items-center gap-3">
+              <Input onChange={(event) => setFile(event.target.files?.[0] ?? null)} type="file" />
+              <ButtonCTA disabled={isSaving || !file} onClick={uploadSelectedFile} variant="outline">
+                Upload image
+              </ButtonCTA>
+            </div>
+            <div className="grid gap-3 md:grid-cols-3">
+              {activity.media.map((item) => {
+                const mediaUrl = item.url ?? item.file?.url;
+                const isBroken = brokenMediaIds.has(item.id);
+
+                return (
+                  <div className="overflow-hidden rounded-travel-md border border-travel-border" key={item.id}>
+                    <div className="relative aspect-[4/3] bg-travel-bg">
+                      {mediaUrl && !isBroken ? (
+                        <img
+                          alt={item.altText ?? ""}
+                          className="h-full w-full object-cover"
+                          onError={() =>
+                            setBrokenMediaIds((current) => new Set(current).add(item.id))
+                          }
+                          src={mediaUrl}
+                        />
+                      ) : (
+                        <div className="flex h-full flex-col items-center justify-center gap-2 px-4 text-center text-travel-muted">
+                          <ImageOff className="size-7" />
+                          <span className="text-xs font-medium">Image URL could not be loaded</span>
+                        </div>
+                      )}
+                      {item.isCover ? (
+                        <Badge className="absolute left-2 top-2" variant="neutral">
+                          Cover
+                        </Badge>
+                      ) : null}
+                    </div>
+                    <div className="border-t border-travel-border p-3">
+                      <div className="flex items-center justify-between text-xs text-travel-muted">
+                        <span>{item.isCover ? "Cover" : "Gallery"}</span>
+                        <span>#{item.sortOrder}</span>
+                      </div>
+                      <div className="mt-3 flex flex-wrap gap-2">
+                        <ButtonCTA
+                          disabled={isSaving}
+                          leftIcon={<Pencil className="size-3.5" />}
+                          onClick={() => setEditingMedia(item)}
+                          size="sm"
+                          type="button"
+                          variant="outline"
+                        >
+                          Edit URL
+                        </ButtonCTA>
+                        {!item.isCover ? (
+                          <ButtonCTA
+                            disabled={isSaving}
+                            onClick={() => void setCover(item)}
+                            size="sm"
+                            type="button"
+                            variant="ghost"
+                          >
+                            Set cover
+                          </ButtonCTA>
+                        ) : null}
+                        <ButtonCTA
+                          disabled={isSaving}
+                          leftIcon={<Trash2 className="size-3.5" />}
+                          onClick={() => setDeletingMedia(item)}
+                          size="sm"
+                          type="button"
+                          variant="ghost"
+                        >
+                          Delete
+                        </ButtonCTA>
+                      </div>
+                    </div>
                   </div>
-                  <div className="flex items-center justify-between p-3 text-xs text-travel-muted">
-                    <span>{item.isCover ? "Cover" : "Gallery"}</span>
-                    <span>#{item.sortOrder}</span>
-                  </div>
-                </div>
-              );
-            })}
+                );
+              })}
+            </div>
+            {error ? <p className="text-sm font-medium text-red-700">{error}</p> : null}
           </div>
-          {error ? <p className="text-sm font-medium text-red-700">{error}</p> : null}
+        </CardContent>
+      </Card>
+
+      <AdminMediaEditDialog
+        isSaving={isSaving}
+        media={editingMedia}
+        onClose={() => setEditingMedia(null)}
+        onSave={saveMedia}
+      />
+
+      <Dialog
+        description="This removes the image from the activity gallery. Uploaded files are not deleted."
+        onClose={() => setDeletingMedia(null)}
+        open={Boolean(deletingMedia)}
+        title="Delete image?"
+      >
+        <div className="flex justify-end gap-2">
+          <ButtonCTA onClick={() => setDeletingMedia(null)} type="button" variant="ghost">
+            Cancel
+          </ButtonCTA>
+          <ButtonCTA disabled={isSaving} onClick={() => void deleteMedia()} type="button" variant="danger">
+            {isSaving ? "Deleting..." : "Delete image"}
+          </ButtonCTA>
         </div>
-      </CardContent>
-    </Card>
+      </Dialog>
+    </>
+  );
+}
+
+function AdminMediaEditDialog({
+  isSaving,
+  media,
+  onClose,
+  onSave
+}: {
+  isSaving: boolean;
+  media: AdminActivity["media"][number] | null;
+  onClose: () => void;
+  onSave: (input: {
+    altText: string;
+    isCover: boolean;
+    sortOrder: number;
+    url: string;
+  }) => Promise<void>;
+}) {
+  const [url, setUrl] = useState("");
+  const [altText, setAltText] = useState("");
+  const [sortOrder, setSortOrder] = useState(0);
+  const [isCover, setIsCover] = useState(false);
+
+  useEffect(() => {
+    if (!media) return;
+    setUrl(media.url ?? media.file?.url ?? "");
+    setAltText(media.altText ?? "");
+    setSortOrder(media.sortOrder);
+    setIsCover(media.isCover);
+  }, [media]);
+
+  return (
+    <Dialog
+      description="Replace a broken image URL, update its label, or make it the cover image."
+      onClose={onClose}
+      open={Boolean(media)}
+      title="Edit image"
+    >
+      <form
+        className="grid gap-4"
+        onSubmit={(event) => {
+          event.preventDefault();
+          void onSave({ altText, isCover, sortOrder, url });
+        }}
+      >
+        <Field label="Image URL" required>
+          <Input onChange={(event) => setUrl(event.target.value)} required type="url" value={url} />
+        </Field>
+        <Field label="Alt text">
+          <Input onChange={(event) => setAltText(event.target.value)} value={altText} />
+        </Field>
+        <Field label="Sort order">
+          <Input
+            min={0}
+            onChange={(event) => setSortOrder(Number(event.target.value))}
+            type="number"
+            value={sortOrder}
+          />
+        </Field>
+        <label className="flex items-center gap-2 text-sm font-medium text-travel-dark">
+          <input
+            checked={isCover}
+            onChange={(event) => setIsCover(event.target.checked)}
+            type="checkbox"
+          />
+          Set as cover image
+        </label>
+        <div className="flex justify-end gap-2 border-t border-travel-border pt-4">
+          <ButtonCTA onClick={onClose} type="button" variant="ghost">
+            Cancel
+          </ButtonCTA>
+          <ButtonCTA disabled={isSaving || !url.trim()} type="submit">
+            {isSaving ? "Saving..." : "Save image"}
+          </ButtonCTA>
+        </div>
+      </form>
+    </Dialog>
   );
 }
 

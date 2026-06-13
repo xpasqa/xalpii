@@ -2,11 +2,19 @@ import type { ReactNode } from "react";
 import Link from "next/link";
 import { ArrowRight, Check, Compass, ShieldCheck, Sparkles } from "lucide-react";
 import { ActivityCard } from "../activity/ActivityCard";
-import type { TravelActivity, TravelCity } from "../../../data/mock-travel";
-import { categories } from "../../../data/mock-travel";
+import type { TravelActivity, TravelCity } from "../../../types/travel";
 import { formatMoney } from "../../../lib/money";
 import { routes } from "../../../lib/routes";
 import { Badge, ButtonCTA, Card, CardContent, CardHeader, CardTitle } from "../../ui";
+
+const publicCategories = [
+  "Cultural Experience",
+  "Food & Cooking",
+  "Adventure",
+  "Water Activity",
+  "Guided Tour",
+  "Workshop"
+];
 
 export function SectionHeader({
   title,
@@ -36,10 +44,10 @@ export function FeaturedCities({ cities }: { cities: TravelCity[] }) {
   return (
     <section className="mx-auto max-w-7xl px-4 pb-8 pt-14 sm:px-6 lg:px-8">
       <SectionHeader title="Featured cities" />
-      <div className="mt-7 flex snap-x snap-mandatory gap-3 overflow-x-auto pb-2 sm:grid sm:gap-4 sm:overflow-visible sm:pb-0 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-6">
+      <div className="scrollbar-none mt-7 flex snap-x snap-mandatory gap-3 overflow-x-auto pb-2 sm:gap-4">
         {cities.map((city) => (
           <Link
-            className="group relative w-[48vw] max-w-[176px] shrink-0 snap-start overflow-hidden rounded-travel-lg bg-travel-dark shadow-sm transition duration-300 hover:-translate-y-0.5 hover:shadow-[0_18px_36px_rgba(26,26,26,0.14)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-travel-primary/30 focus-visible:ring-offset-2 sm:w-auto sm:max-w-none sm:shrink"
+            className="group relative w-[48vw] max-w-[176px] shrink-0 snap-start overflow-hidden rounded-travel-lg bg-travel-dark shadow-sm transition duration-300 hover:-translate-y-0.5 hover:shadow-[0_18px_36px_rgba(26,26,26,0.14)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-travel-primary/30 focus-visible:ring-offset-2 sm:w-[184px] sm:max-w-none lg:w-[192px]"
             href={routes.city(city.slug)}
             key={city.slug}
           >
@@ -154,6 +162,24 @@ export function ActivityGrid({
   );
 }
 
+function CategoryTags({ compact = false }: { compact?: boolean }) {
+  return (
+    <div className="flex flex-wrap gap-2">
+      {publicCategories.map((category) => (
+        <span
+          className={[
+            "rounded-full border border-travel-border bg-white font-interface font-medium text-travel-dark",
+            compact ? "px-2.5 py-1.5 text-xs" : "px-3 py-2 text-sm"
+          ].join(" ")}
+          key={category}
+        >
+          {category}
+        </span>
+      ))}
+    </div>
+  );
+}
+
 const topTravelTabs = [
   "Top attractions worldwide",
   "Top destinations",
@@ -220,24 +246,6 @@ export function TopTravelLinksSection() {
         ))}
       </div>
     </section>
-  );
-}
-
-function CategoryTags({ compact = false }: { compact?: boolean }) {
-  return (
-    <div className="flex flex-wrap gap-2">
-      {categories.map((category) => (
-        <span
-          className={[
-            "rounded-full border border-travel-border bg-white font-interface font-medium text-travel-dark",
-            compact ? "px-2.5 py-1.5 text-xs" : "px-3 py-2 text-sm"
-          ].join(" ")}
-          key={category}
-        >
-          {category}
-        </span>
-      ))}
-    </div>
   );
 }
 

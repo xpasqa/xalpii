@@ -50,3 +50,11 @@ h6 {
 ::selection {
   background: rgba(185, 34, 22, 0.16);
 }
+
+.scrollbar-none {
+  scrollbar-width: none;
+}
+
+.scrollbar-none::-webkit-scrollbar {
+  display: none;
+}
