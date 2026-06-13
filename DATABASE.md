@@ -1,53 +1,46 @@
 # Alpii Database Specification
 
-## 1. Purpose
+## Current State
 
-This document defines the initial PostgreSQL database structure for the Alpii MVP.
+Alpii uses PostgreSQL through Prisma. UUIDs are used for business entities, tables and mapped columns use snake_case, and money is stored as integer minor units.
 
-The database must support:
+The current schema supports:
 
-- User, partner, admin roles
-- City and category management
-- Partner activity submission
-- Admin activity curation
-- Public marketplace listing
-- Booking flow
-- Dummy payment
-- QR voucher
-- File metadata for MinIO
-- Currency fields from the beginning
-- Manual payout tracking
-- Review foundation
-- Audit logs
+- authentication and roles
+- partner activity lifecycle
+- destination hierarchy
+- activity packages/options
+- option pricing and availability
+- published revisions
+- booking, dummy payment, and vouchers
+- persisted checkout contact/traveler data
+- verified reviews and media moderation
+- payout records and audit logs
 
-The MVP is English only, uses dummy payment, and prepares the structure for Stripe, real email, multi-currency conversion, and translation later.
+## Core Rules
 
----
+- Public queries return only `PUBLISHED` activities.
+- Partner mutation queries verify ownership.
+- Pricing and booking totals use USD minor units.
+- Backend calculations are authoritative.
+- Booking rows retain price and participant snapshots.
+- Meeting times are local-time strings and are not timezone-converted.
+- Admin mutations should create audit events where the module supports them.
 
-## 2. Database Principles
+## Identity and Access
 
-- Use PostgreSQL.
-- Use Prisma as ORM.
-- Use UUID as primary ID for business entities.
-- Use snake_case for table and column names.
-- Use UPPER_SNAKE_CASE for enum values.
-- Store money values in integer minor units whenever possible.
-  - Example: USD 10.50 should be stored as `1050`.
-- Every important table should include:
-  - `id`
-  - `created_at`
-  - `updated_at`
-- Use soft delete only where needed.
-- Booking must store a price snapshot.
-- Public users should only see `PUBLISHED` activities.
-- Partner queries must always check ownership.
-- Admin actions should be recorded in audit logs.
+### User
 
----
+Stores login identity:
 
-## 3. Core Enums
+- unique email
+- nullable password hash for compatibility
+- full name
+- `UserRole`
+- `UserStatus`
+- timestamps
 
-### UserRole
+Roles:
 
 ```txt
 USER
@@ -56,789 +49,295 @@ ADMIN
 SUPER_ADMIN
 ```
 
-### PartnerStatus
+### Partner
+
+One-to-one with a partner user. Stores business/legal identity, status, contact/address fields, description, activities, revisions, and payout relations.
+
+## Marketplace Master Data
+
+### Destination
+
+Hierarchical destination:
+
+- `COUNTRY`
+- `REGION`
+- `CITY`
+- `AREA`
+
+Each destination can have a parent and children. Public destination pages use active destinations that contain published activities.
+
+### City
+
+Legacy flat city model retained for backward compatibility. `Activity.cityId` remains required in the current schema while new UI and public metadata prefer `Activity.destinationId`.
+
+Do not remove `City` until all legacy activity/admin/public contracts have been migrated.
+
+### Category
+
+Stores name, slug, description, icon, active state, and sort order.
+
+## Activity Catalog
+
+### Activity
+
+Core fields include:
+
+- partner, legacy city, optional destination, and category relations
+- title and unique slug
+- short/full descriptions
+- lifecycle status
+- pricing mode
+- duration and policy fields
+- JSON highlights, includes, exclusions, and itinerary
+- rating average/count
+- publish timestamps
+
+An activity can have multiple media rows, packages/options, pricing fallbacks, availability rows, bookings, reviews, and revisions.
+
+### ActivityMedia
+
+Gallery item with optional `FileAsset` or URL, alt text, order, and cover flag.
+
+### ActivityOption
+
+Bookable package/variant with:
+
+- title and option slug unique within the activity
+- description
+- duration and meeting-point overrides
+- `meetingTimes` JSON
+- availability mode
+- available weekdays
+- daily capacity
+- default/active/sort state
+
+If `meetingTimes` is configured, booking creation requires one of the configured values. Values such as `07:00` are stored and displayed as local-time text, not converted through UTC.
+
+### ActivityOptionPricingTier
+
+Preferred pricing model for new flows:
+
+- USD currency
+- minimum/maximum total travelers
+- adult price cents
+- optional child price cents
+- optional discount metadata
+- per-person price type
+- active state
+
+The service rejects invalid or overlapping active tiers.
+
+### ActivityPricing and ActivityPricingTier
+
+Legacy activity-level simple and tier pricing. These remain as backward-compatible fallbacks when option-level pricing is absent.
+
+### ActivityAvailability
+
+Scheduled session:
+
+- activity and optional option relation
+- start/end date-time
+- capacity
+- booked count
+- active state
+
+Scheduled bookings require an active matching availability row.
+
+### ActivityOptionDateInventory
+
+Per-option/per-date inventory for `ALWAYS_AVAILABLE` packages. The unique `(optionId, travelDate)` row tracks copied capacity and booked count.
+
+Dates are normalized consistently for inventory lookup. If daily capacity is null, the option is treated as unlimited for MVP.
+
+### ActivityRevision
+
+Stores a complete proposed JSON snapshot for edits to a published activity. Draft/pending/rejected revisions do not affect live public data. Applying an approved revision updates live records while preserving booking references.
+
+## Booking Domain
+
+### Booking
+
+Stores:
+
+- user, activity, option, and optional availability
+- travel date
+- selected local `meetingTime`
+- pickup choice/address
+- special requirements
+- status and timestamps
+- USD currency and total snapshot
+- platform fee and partner payout snapshots
+
+Old bookings may have null checkout-detail relations/fields. All booking UIs must handle this gracefully.
+
+### BookingParticipant
+
+Commercial participant line:
+
+- `ADULT` or `CHILD`
+- label
+- quantity
+- unit price cents
+
+This is the pricing snapshot used to explain the booking total.
+
+### BookingContact
+
+Optional one-to-one relation for backward compatibility with old bookings. New checkout bookings create it with:
+
+- full name
+- email
+- phone number
+- marketing opt-in
+
+The current checkout UI stores `marketingOptIn = false` because the opt-in control is not implemented.
+
+### BookingTraveler
+
+Individual named traveler rows:
+
+- participant type
+- first name
+- last name
+- sort order
+
+Backend validation requires adult/child row counts to match the participant quantities submitted for a new booking.
+
+### PickupChoice
 
 ```txt
-PENDING
-APPROVED
-REJECTED
-SUSPENDED
+PICKUP
+MEET_AT_POINT
 ```
 
-### ActivityStatus
+`pickupAddress` is required when `PICKUP` is selected. Special requirements are limited by the booking DTO.
 
-```txt
-DRAFT
-PENDING_REVIEW
-APPROVED
-PUBLISHED
-REJECTED
-ARCHIVED
-```
+## Payment and Fulfillment
 
-### BookingStatus
+### Payment
 
-```txt
-PENDING_PAYMENT
-CONFIRMED
-CANCELLED
-COMPLETED
-REFUNDED
-```
+One-to-one with booking. Stores provider, status, amount/currency, provider reference, payment timestamp, and audit timestamps.
 
-### PaymentProvider
+Current implemented provider:
 
 ```txt
 DUMMY
-STRIPE
 ```
 
-### PaymentStatus
+`STRIPE` exists in the enum for future integration but is not implemented.
+
+### Voucher
+
+One-to-one with booking. Stores unique code, QR payload, status, and use timestamp. Dummy payment confirmation creates one voucher idempotently.
+
+Partner/admin validation changes:
+
+```txt
+Voucher ACTIVE → USED
+Booking CONFIRMED → COMPLETED
+```
+
+## Reviews
+
+### Review
+
+Verified review fields include:
+
+- user
+- activity
+- required unique booking
+- optional activity option
+- rating, title, and comment
+- moderation status
+- featured flag
+- admin-edited public title/comment
+- moderation metadata and timestamps
+
+Rules:
+
+- Booking belongs to the review user.
+- Booking status is `COMPLETED`.
+- One review per booking.
+- Only `APPROVED` reviews count toward `Activity.ratingAverage` and `reviewCount`.
+
+### ReviewMedia
+
+Optional file/URL media with sort order and moderation status:
 
 ```txt
 PENDING
-PAID
-FAILED
-EXPIRED
-REFUNDED
-```
-
-### VoucherStatus
-
-```txt
-ACTIVE
-USED
-CANCELLED
-EXPIRED
-```
-
-### FileVisibility
-
-```txt
-PUBLIC
-PRIVATE
-```
-
-### PayoutStatus
-
-```txt
-PENDING
-PROCESSING
-PAID
-FAILED
-CANCELLED
-```
-
-### ReviewStatus
-
-```txt
-PENDING
-PUBLISHED
+APPROVED
+REJECTED
 HIDDEN
 ```
 
----
+Only approved media is returned publicly.
 
-## 4. Main Tables
+## Storage and Operations
 
-## users
+### FileAsset
 
-Stores all login accounts.
+Stores MinIO/object metadata:
 
-```txt
-id uuid primary key
-email varchar unique not null
-password_hash varchar not null
-full_name varchar not null
-role UserRole not null default USER
-phone varchar nullable
-avatar_file_id uuid nullable
-is_active boolean not null default true
-email_verified_at timestamp nullable
-last_login_at timestamp nullable
-created_at timestamp not null
-updated_at timestamp not null
-```
+- bucket and unique object key
+- optional URL
+- public/private visibility
+- MIME type, size, original name
+- uploader
 
-Notes:
+It is referenced by activity media, review media, and legacy city images.
 
-- Partner and admin are also users.
-- Do not create separate auth tables for each role.
-- Role-based access should be handled by backend guards.
+### AuditLog
 
----
+Stores actor, action, entity type/id, metadata, and timestamp for operational traceability.
 
-## partners
+### Payout
 
-Stores partner/supplier profile.
+The schema stores partner, currency, amount, status, reference, notes, and payment timestamp.
 
-```txt
-id uuid primary key
-user_id uuid unique not null references users(id)
-company_name varchar not null
-slug varchar unique not null
-status PartnerStatus not null default PENDING
-contact_name varchar nullable
-contact_email varchar nullable
-contact_phone varchar nullable
-country varchar nullable
-city varchar nullable
-address text nullable
-description text nullable
-website_url varchar nullable
-logo_file_id uuid nullable
-rejection_reason text nullable
-approved_at timestamp nullable
-created_at timestamp not null
-updated_at timestamp not null
-```
+Payout automation and real transfer integration are not implemented. This model is a foundation for planned partner revenue work.
 
-Notes:
+## Money and Currency
 
-- One user can have one partner profile.
-- Partner must be approved before activities can be published.
+- Base currency: USD.
+- Amount fields use cents.
+- Option pricing must be USD for MVP.
+- Booking, payment, fee, and payout snapshots remain USD.
+- Frontend conversion to IDR/EUR/CHF is display-only using static rates.
+- The backend never trusts a frontend total.
 
----
+## Status Lifecycles
 
-## cities
-
-Stores destination cities.
+Activity:
 
 ```txt
-id uuid primary key
-name varchar not null
-slug varchar unique not null
-country varchar not null
-region varchar nullable
-timezone varchar nullable
-default_currency varchar not null default 'USD'
-hero_file_id uuid nullable
-description text nullable
-is_active boolean not null default true
-created_at timestamp not null
-updated_at timestamp not null
+DRAFT → PENDING_REVIEW → APPROVED → PUBLISHED
 ```
 
-Notes:
+Revision requests and rejected/archive states are also supported.
 
-- Public city listing should only show active cities.
-- Region can be continent or commercial region.
-
----
-
-## categories
-
-Stores activity categories.
+Booking:
 
 ```txt
-id uuid primary key
-name varchar not null
-slug varchar unique not null
-description text nullable
-icon_file_id uuid nullable
-is_active boolean not null default true
-sort_order integer not null default 0
-created_at timestamp not null
-updated_at timestamp not null
+PENDING_PAYMENT → CONFIRMED → COMPLETED
 ```
 
-Examples:
-
-- Guided Tour
-- Food Experience
-- Water Activity
-- Cultural Experience
-- Adventure
-- Workshop
-- Attraction Ticket
-- Day Trip
-
----
-
-## activities
-
-Stores bookable activity products.
+Payment:
 
 ```txt
-id uuid primary key
-partner_id uuid not null references partners(id)
-city_id uuid not null references cities(id)
-category_id uuid not null references categories(id)
-title varchar not null
-slug varchar unique not null
-short_description text nullable
-description text not null
-duration_minutes integer nullable
-meeting_point text nullable
-included text nullable
-excluded text nullable
-important_info text nullable
-cancellation_policy text nullable
-min_participants integer not null default 1
-max_participants integer nullable
-status ActivityStatus not null default DRAFT
-rejection_reason text nullable
-approved_by_user_id uuid nullable references users(id)
-approved_at timestamp nullable
-published_at timestamp nullable
-created_at timestamp not null
-updated_at timestamp not null
+PENDING → PAID
 ```
 
-Notes:
-
-- Public users only see `PUBLISHED` activities.
-- Partner can edit `DRAFT` and `REJECTED` activities.
-- Admin can approve or reject `PENDING_REVIEW` activities.
-
----
-
-## activity_media
-
-Stores gallery images for activities.
+Voucher:
 
 ```txt
-id uuid primary key
-activity_id uuid not null references activities(id)
-file_id uuid not null references files(id)
-alt_text varchar nullable
-sort_order integer not null default 0
-is_cover boolean not null default false
-created_at timestamp not null
-updated_at timestamp not null
+ACTIVE → USED
 ```
 
-Notes:
-
-- One activity should have one cover image.
-- Activity cards should use the cover image.
-
----
-
-## activity_pricing
-
-Stores activity price.
+Review:
 
 ```txt
-id uuid primary key
-activity_id uuid not null references activities(id)
-currency varchar not null default 'USD'
-adult_price_amount integer not null
-child_price_amount integer nullable
-infant_price_amount integer nullable
-platform_fee_percentage numeric(5,2) not null default 15.00
-is_active boolean not null default true
-created_at timestamp not null
-updated_at timestamp not null
+PENDING_REVIEW → APPROVED
 ```
 
-Notes:
-
-- Store amount in minor units.
-- Example: USD 100.00 = 10000.
-- MVP can use adult price only.
-- Keep child and infant price nullable for future.
-
----
-
-## activity_availability
-
-Stores basic availability.
-
-```txt
-id uuid primary key
-activity_id uuid not null references activities(id)
-start_date date not null
-end_date date nullable
-start_time time nullable
-available_days varchar[] nullable
-capacity integer nullable
-is_active boolean not null default true
-created_at timestamp not null
-updated_at timestamp not null
-```
-
-Notes:
-
-- MVP can keep availability simple.
-- `available_days` can contain values like `MONDAY`, `TUESDAY`, etc.
-- More advanced inventory can be added later.
-
----
-
-## bookings
-
-Stores user bookings.
-
-```txt
-id uuid primary key
-booking_code varchar unique not null
-user_id uuid not null references users(id)
-activity_id uuid not null references activities(id)
-partner_id uuid not null references partners(id)
-selected_date date not null
-selected_time time nullable
-participant_quantity integer not null default 1
-currency varchar not null
-unit_price_amount integer not null
-subtotal_amount integer not null
-platform_fee_percentage numeric(5,2) not null
-platform_fee_amount integer not null
-partner_net_amount integer not null
-total_amount integer not null
-booking_status BookingStatus not null default PENDING_PAYMENT
-payment_status PaymentStatus not null default PENDING
-confirmed_at timestamp nullable
-cancelled_at timestamp nullable
-completed_at timestamp nullable
-created_at timestamp not null
-updated_at timestamp not null
-```
-
-Notes:
-
-- Booking must store price snapshot.
-- Do not depend on current activity price after booking is created.
-- `total_amount` is what user pays.
-- `partner_net_amount` is what partner earns before payout.
-
----
-
-## booking_participants
-
-Stores participant details if needed.
-
-```txt
-id uuid primary key
-booking_id uuid not null references bookings(id)
-full_name varchar not null
-email varchar nullable
-phone varchar nullable
-participant_type varchar not null default 'ADULT'
-created_at timestamp not null
-updated_at timestamp not null
-```
-
-Notes:
-
-- MVP can create one participant using user data.
-- Future can support multiple participant details.
-
----
-
-## payments
-
-Stores payment records.
-
-```txt
-id uuid primary key
-booking_id uuid unique not null references bookings(id)
-provider PaymentProvider not null default DUMMY
-provider_reference varchar nullable
-currency varchar not null
-amount integer not null
-status PaymentStatus not null default PENDING
-paid_at timestamp nullable
-failed_at timestamp nullable
-refunded_at timestamp nullable
-metadata jsonb nullable
-created_at timestamp not null
-updated_at timestamp not null
-```
-
-Notes:
-
-- MVP uses `DUMMY` provider.
-- Stripe can be added later without changing booking flow.
-- Do not confirm booking without payment record.
-
----
-
-## payment_events
-
-Stores payment event logs.
-
-```txt
-id uuid primary key
-payment_id uuid nullable references payments(id)
-provider PaymentProvider not null
-event_type varchar not null
-provider_event_id varchar nullable
-payload jsonb nullable
-created_at timestamp not null
-```
-
-Notes:
-
-- Dummy payment should also create event logs.
-- Future Stripe webhook payloads should be stored here.
-
----
-
-## vouchers
-
-Stores QR voucher data.
-
-```txt
-id uuid primary key
-booking_id uuid unique not null references bookings(id)
-voucher_code varchar unique not null
-qr_payload text not null
-status VoucherStatus not null default ACTIVE
-used_at timestamp nullable
-used_by_partner_user_id uuid nullable references users(id)
-expires_at timestamp nullable
-created_at timestamp not null
-updated_at timestamp not null
-```
-
-Notes:
-
-- Voucher is generated after booking is confirmed.
-- Partner validates voucher from dashboard.
-
----
-
-## files
-
-Stores MinIO file metadata.
-
-```txt
-id uuid primary key
-bucket varchar not null
-object_key varchar unique not null
-visibility FileVisibility not null
-mime_type varchar not null
-size_bytes integer not null
-original_name varchar nullable
-uploaded_by_user_id uuid nullable references users(id)
-public_url text nullable
-created_at timestamp not null
-updated_at timestamp not null
-```
-
-Notes:
-
-- Public files can have public URL.
-- Private files require signed URL.
-- All uploads must create file metadata.
-
----
-
-## reviews
-
-Stores user reviews.
-
-```txt
-id uuid primary key
-booking_id uuid unique not null references bookings(id)
-activity_id uuid not null references activities(id)
-user_id uuid not null references users(id)
-rating integer not null
-comment text nullable
-status ReviewStatus not null default PENDING
-published_at timestamp nullable
-created_at timestamp not null
-updated_at timestamp not null
-```
-
-Notes:
-
-- Rating should be between 1 and 5.
-- User can review only after confirmed or completed booking.
-
----
-
-## payouts
-
-Tracks manual partner payouts.
-
-```txt
-id uuid primary key
-partner_id uuid not null references partners(id)
-currency varchar not null
-total_amount integer not null
-status PayoutStatus not null default PENDING
-notes text nullable
-paid_at timestamp nullable
-created_by_user_id uuid nullable references users(id)
-created_at timestamp not null
-updated_at timestamp not null
-```
-
-Notes:
-
-- MVP payout is manual.
-- Admin transfers outside system and marks payout as paid.
-
----
-
-## payout_items
-
-Links bookings to payouts.
-
-```txt
-id uuid primary key
-payout_id uuid not null references payouts(id)
-booking_id uuid not null references bookings(id)
-amount integer not null
-created_at timestamp not null
-```
-
-Notes:
-
-- One payout can contain multiple bookings.
-- A booking should not be included in multiple paid payouts.
-
----
-
-## platform_fee_settings
-
-Stores global platform fee configuration.
-
-```txt
-id uuid primary key
-name varchar not null
-fee_percentage numeric(5,2) not null
-is_active boolean not null default true
-created_at timestamp not null
-updated_at timestamp not null
-```
-
-Notes:
-
-- MVP can use one active global fee.
-- Default recommended fee is 15%.
-
----
-
-## audit_logs
-
-Stores important system/admin actions.
-
-```txt
-id uuid primary key
-actor_user_id uuid nullable references users(id)
-action varchar not null
-entity_type varchar not null
-entity_id uuid nullable
-metadata jsonb nullable
-created_at timestamp not null
-```
-
-Examples:
-
-- `ACTIVITY_APPROVED`
-- `ACTIVITY_REJECTED`
-- `BOOKING_CONFIRMED`
-- `VOUCHER_USED`
-- `PAYOUT_MARKED_PAID`
-- `CITY_CREATED`
-- `CATEGORY_CREATED`
-
----
-
-## activity_translations Optional Future
-
-Prepared for future multi-language content.
-
-```txt
-id uuid primary key
-activity_id uuid not null references activities(id)
-locale varchar not null
-title varchar not null
-short_description text nullable
-description text not null
-included text nullable
-excluded text nullable
-important_info text nullable
-cancellation_policy text nullable
-created_at timestamp not null
-updated_at timestamp not null
-```
-
-Notes:
-
-- MVP does not need to use this table.
-- Default content is English on the main `activities` table.
-- Future logic can use translation if available, otherwise fallback to English.
-
----
-
-## city_translations Optional Future
-
-```txt
-id uuid primary key
-city_id uuid not null references cities(id)
-locale varchar not null
-name varchar not null
-description text nullable
-created_at timestamp not null
-updated_at timestamp not null
-```
-
----
-
-## category_translations Optional Future
-
-```txt
-id uuid primary key
-category_id uuid not null references categories(id)
-locale varchar not null
-name varchar not null
-description text nullable
-created_at timestamp not null
-updated_at timestamp not null
-```
-
----
-
-## 5. Recommended MVP Build Order
-
-### Migration 1: Foundation
-
-- users
-- partners
-- files
-- audit_logs
-
-### Migration 2: Marketplace Master Data
-
-- cities
-- categories
-- city_translations optional
-- category_translations optional
-
-### Migration 3: Activities
-
-- activities
-- activity_media
-- activity_pricing
-- activity_availability
-- activity_translations optional
-
-### Migration 4: Booking and Payment
-
-- bookings
-- booking_participants
-- payments
-- payment_events
-- vouchers
-
-### Migration 5: Operations
-
-- reviews
-- payouts
-- payout_items
-- platform_fee_settings
-
----
-
-## 6. Important Indexes
-
-Recommended indexes:
-
-```txt
-users.email unique
-partners.user_id unique
-partners.slug unique
-cities.slug unique
-categories.slug unique
-activities.slug unique
-activities.status
-activities.city_id
-activities.category_id
-activities.partner_id
-bookings.user_id
-bookings.partner_id
-bookings.activity_id
-bookings.booking_status
-payments.booking_id unique
-payments.status
-vouchers.booking_id unique
-vouchers.voucher_code unique
-files.object_key unique
-reviews.booking_id unique
-payouts.partner_id
-```
-
----
-
-## 7. MVP Seed Data
-
-Initial seed data should include:
-
-### Admin User
-
-```txt
-email: admin@alpii.local
-role: SUPER_ADMIN
-```
-
-### Platform Fee
-
-```txt
-name: Default Platform Fee
-fee_percentage: 15.00
-is_active: true
-```
-
-### Categories
-
-```txt
-Guided Tour
-Food Experience
-Water Activity
-Cultural Experience
-Adventure
-Workshop
-Attraction Ticket
-Day Trip
-```
-
-### Cities
-
-```txt
-Bali
-Paris
-Tokyo
-Dubai
-Zurich
-```
-
----
-
-## 8. Data Integrity Rules
-
-- A booking must have one payment.
-- A confirmed booking must have one voucher.
-- A public activity must have status `PUBLISHED`.
-- An activity must belong to one partner, one city, and one category.
-- Partner users can only update their own partner profile and activities.
-- Admin can review all activities.
-- Public users cannot see draft, rejected, archived, or pending activities.
-- Payment confirmation must happen on the backend.
-- Dummy payment should still create a payment event.
-- QR voucher validation must update voucher status and audit log.
-
----
-
-## 9. Future Database Extensions
-
-Later phases may add:
-
-- regions
-- itinerary templates
-- itinerary items
-- multi-activity cart
-- exchange_rates
-- user_currency_preferences
-- language_preferences
-- activity_tags
-- guide_assignments
-- refund_requests
-- coupons
-- affiliate_tracking
-- notification_logs
-- email_templates
-- webhook_logs
+Reviews can also be rejected or hidden by admins.

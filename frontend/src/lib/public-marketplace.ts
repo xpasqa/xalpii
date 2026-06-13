@@ -5,7 +5,7 @@ import type { ActivityPricingTier, PricingMode } from "./activity-pricing";
 const placeholderImage =
   "https://images.unsplash.com/photo-1500534314209-a25ddb2bd429?auto=format&fit=crop&w=1200&q=85";
 
-type PublicCity = {
+export type PublicCity = {
   id: string;
   name: string;
   slug: string;

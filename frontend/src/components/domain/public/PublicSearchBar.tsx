@@ -2,8 +2,13 @@
 
 import { Search } from "lucide-react";
 import { useRouter } from "next/navigation";
-import { useMemo, useState } from "react";
-import { cities } from "../../../data/mock-travel";
+import { useEffect, useMemo, useState } from "react";
+import {
+  getPublicActivities,
+  getPublicCities,
+  type PublicActivity,
+  type PublicCity
+} from "../../../lib/public-marketplace";
 import { routes } from "../../../lib/routes";
 
 type PublicSearchBarProps = {
@@ -18,15 +23,46 @@ type SearchResult = {
   meta: string;
   priority: number;
   searchText: string;
-  type: "Destination" | "Region";
+  type: "Activity" | "Destination";
 };
 
 export function PublicSearchBar({ compact = false, placeholder = "Where are you going?" }: PublicSearchBarProps) {
   const router = useRouter();
+  const [activities, setActivities] = useState<PublicActivity[]>([]);
+  const [destinations, setDestinations] = useState<PublicCity[]>([]);
   const [query, setQuery] = useState("");
   const [isFocused, setIsFocused] = useState(false);
 
-  const results = useMemo(() => searchMarketplace(query), [query]);
+  useEffect(() => {
+    let isActive = true;
+
+    async function loadSearchData() {
+      try {
+        const [nextDestinations, nextActivities] = await Promise.all([
+          getPublicCities(),
+          getPublicActivities({ limit: 48 })
+        ]);
+
+        if (!isActive) return;
+        setDestinations(nextDestinations);
+        setActivities(nextActivities);
+      } catch {
+        if (!isActive) return;
+        setDestinations([]);
+        setActivities([]);
+      }
+    }
+
+    void loadSearchData();
+    return () => {
+      isActive = false;
+    };
+  }, []);
+
+  const results = useMemo(
+    () => searchMarketplace(query, destinations, activities),
+    [activities, destinations, query]
+  );
   const showResults = isFocused && query.trim().length > 0 && results.length > 0;
 
   function goToResult(result: SearchResult) {
@@ -43,8 +79,7 @@ export function PublicSearchBar({ compact = false, placeholder = "Where are you 
       return;
     }
 
-    const fallbackCity = cities[0];
-    if (fallbackCity) router.push(routes.city(fallbackCity.slug));
+    router.push(routes.activities);
   }
 
   return (
@@ -121,38 +156,70 @@ export function PublicSearchBar({ compact = false, placeholder = "Where are you 
   );
 }
 
-function searchMarketplace(rawQuery: string): SearchResult[] {
+function searchMarketplace(
+  rawQuery: string,
+  destinations: PublicCity[],
+  activities: PublicActivity[]
+): SearchResult[] {
   const query = normalizeSearch(rawQuery);
   if (!query) return [];
 
   const results: SearchResult[] = [];
 
-  cities.forEach((city) => {
+  destinations.forEach((destination) => {
+    const breadcrumb =
+      destination.destination?.breadcrumb?.map((item) => item.name).join(" · ") ??
+      destination.country;
+    const imageUrl =
+      destination.imageUrl ??
+      destination.imageFile?.url ??
+      "https://images.unsplash.com/photo-1500534314209-a25ddb2bd429?auto=format&fit=crop&w=400&q=75";
+
     results.push({
-      href: routes.city(city.slug),
-      imageUrl: city.imageUrl,
-      label: city.name,
-      meta: `${city.country} · ${city.region}`,
-      priority: scoreMatch(query, [city.name, city.country, city.region, city.shortDescription], 120),
-      searchText: [city.name, city.country, city.region, city.shortDescription].join(" "),
+      href: routes.city(destination.slug),
+      imageUrl,
+      label: destination.name,
+      meta: breadcrumb,
+      priority: scoreMatch(
+        query,
+        [destination.name, destination.country, breadcrumb, destination.description ?? ""],
+        120
+      ),
+      searchText: [
+        destination.name,
+        destination.country,
+        breadcrumb,
+        destination.description ?? ""
+      ].join(" "),
       type: "Destination"
     });
   });
 
-  const regions = new Map<string, { city: (typeof cities)[number]; count: number }>();
-  cities.forEach((city) => {
-    const current = regions.get(city.region);
-    regions.set(city.region, { city: current?.city ?? city, count: (current?.count ?? 0) + 1 });
-  });
-  regions.forEach((value, region) => {
+  activities.forEach((activity) => {
+    const imageUrl =
+      activity.media?.find((item) => item.isCover)?.url ??
+      activity.media?.[0]?.url ??
+      activity.media?.[0]?.file?.url ??
+      "https://images.unsplash.com/photo-1500534314209-a25ddb2bd429?auto=format&fit=crop&w=400&q=75";
+    const destinationName = activity.destination?.name ?? activity.city.name;
+
     results.push({
-      href: routes.city(value.city.slug),
-      imageUrl: value.city.imageUrl,
-      label: region,
-      meta: `${value.count} destination${value.count === 1 ? "" : "s"} · starts with ${value.city.name}`,
-      priority: scoreMatch(query, [region, value.city.country, value.city.name], 95),
-      searchText: [region, value.city.country, value.city.name].join(" "),
-      type: "Region"
+      href: routes.activity(activity.slug),
+      imageUrl,
+      label: activity.title,
+      meta: `${destinationName} · ${activity.category.name}`,
+      priority: scoreMatch(
+        query,
+        [activity.title, destinationName, activity.city.country, activity.category.name],
+        105
+      ),
+      searchText: [
+        activity.title,
+        destinationName,
+        activity.city.country,
+        activity.category.name
+      ].join(" "),
+      type: "Activity"
     });
   });
 

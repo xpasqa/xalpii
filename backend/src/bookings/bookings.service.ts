@@ -11,6 +11,7 @@ import {
   PaymentProvider,
   PaymentStatus,
   ParticipantType,
+  PickupChoice,
   PricingMode,
   Prisma,
   UserRole,
@@ -58,6 +59,10 @@ const bookingInclude = {
   option: true,
   availability: true,
   participants: true,
+  contact: true,
+  travelers: {
+    orderBy: { sortOrder: "asc" }
+  },
   payment: true,
   user: {
     select: {
@@ -168,6 +173,25 @@ export class BookingsService {
       throw new BadRequestException({
         code: "BOOKING_PARTICIPANT_LIMIT_INVALID",
         message: "Bookings require 1-14 adults, 0-14 children, and no more than 14 travelers total"
+      });
+    }
+
+    const travelers = normalizeTravelers(dto.travelers);
+    assertTravelerCounts(travelers, adultQuantity, childQuantity);
+
+    const contact = {
+      email: dto.contact.email.trim().toLowerCase(),
+      fullName: dto.contact.fullName.trim(),
+      marketingOptIn: dto.contact.marketingOptIn,
+      phoneNumber: dto.contact.phoneNumber.trim()
+    };
+    const pickupAddress = dto.preferences.pickupAddress?.trim() || null;
+    const specialRequirements = dto.preferences.specialRequirements?.trim() || null;
+
+    if (dto.preferences.pickupChoice === PickupChoice.PICKUP && !pickupAddress) {
+      throw new BadRequestException({
+        code: "BOOKING_PICKUP_ADDRESS_REQUIRED",
+        message: "Pickup address is required when pickup is selected"
       });
     }
 
@@ -367,6 +391,9 @@ export class BookingsService {
           optionId: selectedOption?.id,
           travelDate,
           meetingTime,
+          pickupChoice: dto.preferences.pickupChoice,
+          pickupAddress,
+          specialRequirements,
           currency: BASE_CURRENCY,
           partnerPayoutCents,
           platformFeeCents,
@@ -380,6 +407,12 @@ export class BookingsService {
               priceCents: participant.priceCents,
               quantity: participant.quantity
             }))
+          },
+          contact: {
+            create: contact
+          },
+          travelers: {
+            create: travelers
           },
           payment: {
             create: {
@@ -406,6 +439,7 @@ export class BookingsService {
             pricingTierId: tier?.id,
             optionId: selectedOption?.id,
             meetingTime,
+            pickupChoice: dto.preferences.pickupChoice,
             travelDate: travelDate?.toISOString(),
             totalAmountCents
           }
@@ -440,7 +474,7 @@ export class BookingsService {
     }
 
     await this.assertBookingAccess(user, booking);
-    return booking;
+    return user.role === UserRole.PARTNER ? toPartnerBooking(booking) : booking;
   }
 
   async confirmDummyPayment(user: AuthenticatedRequestUser, paymentId: string) {
@@ -577,7 +611,12 @@ export class BookingsService {
     }
 
     await this.assertBookingAccess(user, voucher.booking);
-    return voucher;
+    return user.role === UserRole.PARTNER
+      ? {
+          ...voucher,
+          booking: toPartnerBooking(voucher.booking),
+        }
+      : voucher;
   }
 
   async validateVoucher(user: AuthenticatedRequestUser, code: string) {
@@ -613,7 +652,7 @@ export class BookingsService {
       });
     }
 
-    return this.prisma.$transaction(async (tx) => {
+    const result = await this.prisma.$transaction(async (tx) => {
       await tx.voucher.update({
         where: { id: voucher.id },
         data: {
@@ -646,6 +685,13 @@ export class BookingsService {
         }
       });
     });
+
+    return user.role === UserRole.PARTNER
+      ? {
+          ...result,
+          booking: toPartnerBooking(result.booking),
+        }
+      : result;
   }
 
   async partnerBookings(user: AuthenticatedRequestUser, query: PartnerBookingQueryDto) {
@@ -664,17 +710,21 @@ export class BookingsService {
       const search = query.search.trim();
       where.OR = [
         { activity: { title: { contains: search, mode: "insensitive" } } },
+        { contact: { fullName: { contains: search, mode: "insensitive" } } },
+        { contact: { phoneNumber: { contains: search, mode: "insensitive" } } },
         { user: { email: { contains: search, mode: "insensitive" } } },
         { user: { fullName: { contains: search, mode: "insensitive" } } },
         { voucher: { code: { contains: search, mode: "insensitive" } } }
       ];
     }
 
-    return this.prisma.booking.findMany({
+    const bookings = await this.prisma.booking.findMany({
       where,
       include: bookingInclude,
       orderBy: { createdAt: "desc" }
     });
+
+    return bookings.map(toPartnerBooking);
   }
 
   async adminBookings(query: AdminBookingQueryDto) {
@@ -685,6 +735,9 @@ export class BookingsService {
       const search = query.search.trim();
       where.OR = [
         { activity: { title: { contains: search, mode: "insensitive" } } },
+        { contact: { email: { contains: search, mode: "insensitive" } } },
+        { contact: { fullName: { contains: search, mode: "insensitive" } } },
+        { contact: { phoneNumber: { contains: search, mode: "insensitive" } } },
         { user: { email: { contains: search, mode: "insensitive" } } },
         { user: { fullName: { contains: search, mode: "insensitive" } } },
         { voucher: { code: { contains: search, mode: "insensitive" } } }
@@ -785,6 +838,27 @@ export class BookingsService {
   }
 }
 
+function toPartnerBooking(
+  booking: Prisma.BookingGetPayload<{ include: typeof bookingInclude }>
+) {
+  return {
+    ...booking,
+    contact: booking.contact
+      ? {
+          ...booking.contact,
+          email: undefined,
+          marketingOptIn: undefined
+        }
+      : null,
+    user: booking.user
+      ? {
+          ...booking.user,
+          email: undefined
+        }
+      : null
+  };
+}
+
 function normalizeParticipants(participants: CreateBookingDto["participants"]) {
   const normalized = participants
     .map((participant) => ({
@@ -806,6 +880,50 @@ function normalizeParticipants(participants: CreateBookingDto["participants"]) {
   }
 
   return normalized;
+}
+
+function normalizeTravelers(travelers: CreateBookingDto["travelers"]) {
+  const normalized = travelers
+    .map((traveler, index) => ({
+      firstName: traveler.firstName.trim(),
+      lastName: traveler.lastName.trim(),
+      participantType: traveler.participantType,
+      sortOrder: traveler.sortOrder ?? index
+    }))
+    .sort((left, right) => left.sortOrder - right.sortOrder);
+
+  if (
+    normalized.some(
+      (traveler) => !traveler.firstName || !traveler.lastName
+    )
+  ) {
+    throw new BadRequestException({
+      code: "BOOKING_TRAVELER_NAME_REQUIRED",
+      message: "First and last name are required for every traveler"
+    });
+  }
+
+  return normalized;
+}
+
+function assertTravelerCounts(
+  travelers: ReturnType<typeof normalizeTravelers>,
+  adultQuantity: number,
+  childQuantity: number
+) {
+  const adultTravelers = travelers.filter(
+    (traveler) => traveler.participantType === ParticipantType.ADULT
+  ).length;
+  const childTravelers = travelers.filter(
+    (traveler) => traveler.participantType === ParticipantType.CHILD
+  ).length;
+
+  if (adultTravelers !== adultQuantity || childTravelers !== childQuantity) {
+    throw new BadRequestException({
+      code: "BOOKING_TRAVELER_COUNT_MISMATCH",
+      message: "Traveler details must match the selected adult and child quantities"
+    });
+  }
 }
 
 const weekdayByIndex = [

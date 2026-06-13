@@ -402,15 +402,32 @@ export function CheckoutManager({
       const created = await createBooking({
         activityId: activity.id,
         availabilityId: isAlwaysAvailable ? undefined : availabilityId || undefined,
+        contact: {
+          email: contact.email.trim(),
+          fullName: contact.fullName.trim(),
+          marketingOptIn: false,
+          phoneNumber: contact.phone.trim()
+        },
         meetingTime: isAlwaysAvailable ? meetingTime || undefined : undefined,
         optionId: selectedOption?.id,
+        preferences: {
+          pickupAddress: pickupPreference === "pickup" ? pickupAddress.trim() : undefined,
+          pickupChoice: pickupPreference === "pickup" ? "PICKUP" : "MEET_AT_POINT",
+          specialRequirements: specialRequirements.trim() || undefined
+        },
         selectedDate: isAlwaysAvailable ? selectedDate : undefined,
         participants: [
           { label: "Adult", participantType: "ADULT", quantity: adults },
           ...(children > 0
             ? [{ label: "Child", participantType: "CHILD" as const, quantity: children }]
             : [])
-        ]
+        ],
+        travelers: travelers.map((traveler, index) => ({
+          firstName: traveler.firstName.trim(),
+          lastName: traveler.lastName.trim(),
+          participantType: traveler.type === "Child" ? "CHILD" : "ADULT",
+          sortOrder: index
+        }))
       });
       const confirmed = await confirmDummyPayment(created.payment!.id);
       if (typeof window !== "undefined") {
@@ -1374,6 +1391,7 @@ export function UserBookingDetailManager({ bookingId }: { bookingId: string }) {
             ) : null}
           </CardContent>
         </Card>
+        <BookingCheckoutDetails booking={booking} viewerRole={viewer?.role} />
         <Card>
           <CardHeader>
             <CardTitle>Voucher</CardTitle>
@@ -1462,6 +1480,7 @@ export function PartnerBookingsManager() {
       setSearch={setSearch}
       onSearch={load}
       showCustomer
+      audience="partner"
     />
   );
 }
@@ -1549,7 +1568,7 @@ export function AdminBookingsManager() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  return <BookingTable title="Bookings" description="Read-only marketplace booking monitor." bookings={bookings} error={error} isLoading={isLoading} search={search} setSearch={setSearch} onSearch={load} showCustomer />;
+  return <BookingTable title="Bookings" description="Read-only marketplace booking monitor." bookings={bookings} error={error} isLoading={isLoading} search={search} setSearch={setSearch} onSearch={load} showCustomer audience="admin" />;
 }
 
 export function AdminPaymentsManager() {
@@ -1607,8 +1626,10 @@ function BookingTable({
   showCustomer = false,
   reviewByBookingId,
   useDisplayCurrency = false,
-  title
+  title,
+  audience = "user"
 }: {
+  audience?: "user" | "partner" | "admin";
   bookings: Booking[];
   description: string;
   error: string | null;
@@ -1635,7 +1656,44 @@ function BookingTable({
         )
       },
       ...(showCustomer
-        ? [{ key: "customer", header: "Customer", cell: (booking: Booking) => booking.user?.email ?? "Customer" }]
+        ? [{
+            key: "customer",
+            header: "Customer",
+            cell: (booking: Booking) => (
+              <div>
+                <p className="font-medium text-travel-dark">
+                  {booking.contact?.fullName ?? booking.user?.fullName ?? "Customer"}
+                </p>
+                <p className="mt-1 text-xs text-travel-muted">
+                  {audience === "partner"
+                    ? booking.contact?.phoneNumber ?? "Phone unavailable"
+                    : booking.contact?.email ?? booking.user?.email ?? "Email unavailable"}
+                </p>
+              </div>
+            )
+          }]
+        : []),
+      ...(audience === "partner" || audience === "admin"
+        ? [{
+            key: "operations",
+            header: "Trip details",
+            cell: (booking: Booking) => (
+              <div className="max-w-xs text-xs leading-5 text-travel-muted">
+                <p>{booking.travelers?.length ? `${booking.travelers.length} named travelers` : participantLabel(booking)}</p>
+                <p>{booking.meetingTime ? `Meeting ${booking.meetingTime}` : "Meeting time not set"}</p>
+                <p>
+                  {booking.pickupChoice === "PICKUP"
+                    ? booking.pickupAddress || "Pickup requested"
+                    : booking.pickupChoice === "MEET_AT_POINT"
+                      ? "Meet at meeting point"
+                      : "Pickup not recorded"}
+                </p>
+                {booking.specialRequirements ? (
+                  <p className="truncate">Note: {booking.specialRequirements}</p>
+                ) : null}
+              </div>
+            )
+          }]
         : []),
       { key: "bookingStatus", header: "Booking", cell: (booking: Booking) => <BookingStatusBadge status={booking.status} /> },
       { key: "paymentStatus", header: "Payment", cell: (booking: Booking) => <PaymentStatusBadge status={booking.payment?.status ?? "PENDING"} /> },
@@ -1680,7 +1738,7 @@ function BookingTable({
         )
       }
     ],
-    [displayCurrency, reviewByBookingId, showCustomer, useDisplayCurrency]
+    [audience, displayCurrency, reviewByBookingId, showCustomer, useDisplayCurrency]
   );
 
   return (
@@ -1734,6 +1792,94 @@ function SummaryLine({ label, value }: { label: ReactNode; value: ReactNode }) {
       <span className="text-sm text-travel-muted">{label}</span>
       <span className="text-right text-sm font-semibold text-travel-dark">{value}</span>
     </div>
+  );
+}
+
+function BookingCheckoutDetails({
+  booking,
+  viewerRole
+}: {
+  booking: Booking;
+  viewerRole?: AuthUser["role"];
+}) {
+  const hasPersistedDetails = Boolean(
+    booking.contact ||
+      booking.travelers?.length ||
+      booking.pickupChoice ||
+      booking.pickupAddress ||
+      booking.specialRequirements
+  );
+
+  if (!hasPersistedDetails) return null;
+
+  const isPartner = viewerRole === "PARTNER";
+  const pickupLabel =
+    booking.pickupChoice === "PICKUP"
+      ? booking.pickupAddress || "Pickup requested"
+      : booking.pickupChoice === "MEET_AT_POINT"
+        ? "Meet at the activity meeting point"
+        : "Not provided";
+
+  return (
+    <Card>
+      <CardHeader>
+        <CardTitle>Checkout details</CardTitle>
+        <CardDescription>
+          {isPartner
+            ? "Operational traveler and pickup information."
+            : "Contact, traveler, and trip preferences saved with this booking."}
+        </CardDescription>
+      </CardHeader>
+      <CardContent className="grid gap-6 lg:grid-cols-2">
+        <div className="space-y-3">
+          <p className="text-sm font-semibold text-travel-dark">Contact</p>
+          <SummaryLine label="Name" value={booking.contact?.fullName ?? "Not provided"} />
+          {!isPartner ? (
+            <SummaryLine label="Email" value={booking.contact?.email ?? "Not provided"} />
+          ) : null}
+          <SummaryLine label="Phone" value={booking.contact?.phoneNumber ?? "Not provided"} />
+          {!isPartner ? (
+            <SummaryLine
+              label="Marketing"
+              value={booking.contact?.marketingOptIn ? "Opted in" : "Not opted in"}
+            />
+          ) : null}
+        </div>
+        <div className="space-y-3">
+          <p className="text-sm font-semibold text-travel-dark">Trip operations</p>
+          {booking.meetingTime ? (
+            <SummaryLine label="Meeting time" value={booking.meetingTime} />
+          ) : null}
+          <SummaryLine label="Pickup" value={pickupLabel} />
+          <SummaryLine
+            label="Special requirements"
+            value={booking.specialRequirements || "None"}
+          />
+        </div>
+        <div className="lg:col-span-2">
+          <p className="mb-3 text-sm font-semibold text-travel-dark">Travelers</p>
+          {booking.travelers?.length ? (
+            <div className="divide-y divide-[#2B2B2B]/10 border-y border-[#2B2B2B]/10">
+              {booking.travelers.map((traveler, index) => (
+                <div
+                  className="flex items-center justify-between gap-4 py-3 text-sm"
+                  key={traveler.id}
+                >
+                  <span className="text-travel-muted">
+                    {index + 1}. {traveler.participantType === "CHILD" ? "Child" : "Adult"}
+                  </span>
+                  <span className="font-semibold text-travel-dark">
+                    {traveler.firstName} {traveler.lastName}
+                  </span>
+                </div>
+              ))}
+            </div>
+          ) : (
+            <p className="text-sm text-travel-muted">Traveler names were not collected for this older booking.</p>
+          )}
+        </div>
+      </CardContent>
+    </Card>
   );
 }
 

@@ -21,6 +21,28 @@ export type BookingParticipant = {
   createdAt: string;
 };
 
+export type BookingContact = {
+  id: string;
+  bookingId: string;
+  fullName: string;
+  email?: string;
+  phoneNumber: string;
+  marketingOptIn?: boolean;
+  createdAt: string;
+  updatedAt: string;
+};
+
+export type BookingTraveler = {
+  id: string;
+  bookingId: string;
+  participantType: "ADULT" | "CHILD";
+  firstName: string;
+  lastName: string;
+  sortOrder: number;
+  createdAt: string;
+  updatedAt: string;
+};
+
 export type BookingPayment = {
   id: string;
   bookingId: string;
@@ -47,7 +69,7 @@ export type BookingVoucher = {
 
 export type BookingUser = {
   id: string;
-  email: string;
+  email?: string;
   fullName: string;
 };
 
@@ -59,6 +81,9 @@ export type Booking = {
   availabilityId?: string | null;
   travelDate?: string | null;
   meetingTime?: string | null;
+  pickupChoice?: "PICKUP" | "MEET_AT_POINT" | null;
+  pickupAddress?: string | null;
+  specialRequirements?: string | null;
   status: BookingStatus;
   currency: string;
   totalAmountCents: number;
@@ -83,6 +108,8 @@ export type Booking = {
     availabilityMode: "SCHEDULED_SESSIONS" | "ALWAYS_AVAILABLE";
   } | null;
   participants: BookingParticipant[];
+  contact?: BookingContact | null;
+  travelers?: BookingTraveler[];
   payment?: BookingPayment | null;
   user?: BookingUser;
   voucher?: BookingVoucher | null;
@@ -107,6 +134,23 @@ export async function createBooking(input: {
     label: string;
     quantity: number;
   }>;
+  contact: {
+    fullName: string;
+    email: string;
+    phoneNumber: string;
+    marketingOptIn: boolean;
+  };
+  travelers: Array<{
+    participantType: "ADULT" | "CHILD";
+    firstName: string;
+    lastName: string;
+    sortOrder: number;
+  }>;
+  preferences: {
+    pickupChoice: "PICKUP" | "MEET_AT_POINT";
+    pickupAddress?: string;
+    specialRequirements?: string;
+  };
 }) {
   return requireData(
     await authenticatedFetch<Booking>({
